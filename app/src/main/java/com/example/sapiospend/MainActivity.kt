@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
 
     private val eventViewModel: EventViewModel by viewModels {
         val db = AppDatabase.getDatabase(applicationContext)
-        val repository = EventRepository(db.eventDao())
+        val repository = EventRepository(db.eventDao(), db.expenseDao())
         EventViewModel.factory(repository)
     }
 

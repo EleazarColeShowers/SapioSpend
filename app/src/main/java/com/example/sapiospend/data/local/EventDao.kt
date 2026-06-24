@@ -7,15 +7,12 @@ import kotlinx.coroutines.flow.Flow
 interface EventDao {
 
     @Insert
-    suspend fun insertEvent(
-        event: EventEntity
-    )
+    suspend fun insertEvent(event: EventEntity)
 
     @Delete
-    suspend fun deleteEvent(
-        event: EventEntity
-    )
+    suspend fun deleteEvent(event: EventEntity)
 
+    // Room re-emits whenever the events table changes, so the UI updates without polling.
     @Query("SELECT * FROM events")
     fun getAllEvents(): Flow<List<EventEntity>>
 }

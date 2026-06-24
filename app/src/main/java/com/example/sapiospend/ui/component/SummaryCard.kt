@@ -15,13 +15,14 @@ fun SummaryCard(title: String, amount: Double, color: Color) {
     Card(
         modifier = Modifier.width(110.dp).height(90.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF)),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(title, color = Color(0xFF94A3B8), fontSize = 12.sp)
+            Text(title, color = Color(0xFF6B7280), fontSize = 12.sp)
             Text("₦${amount.toInt()}", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }

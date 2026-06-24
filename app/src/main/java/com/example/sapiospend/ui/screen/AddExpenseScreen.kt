@@ -22,15 +22,15 @@ private val Border = Color(0xFFE5E7EB)
 private val Black = Color(0xFF111111)
 
 @Composable
-fun AddEventScreen(
+fun AddExpenseScreen(
     onBack: () -> Unit = {},
-    onSaveEvent: (name: String, budget: Double, eventType: String) -> Unit = { _, _, _ -> }
+    onSaveExpense: (title: String, category: String, amount: Double) -> Unit = { _, _, _ -> }
 ) {
-    var eventName by remember { mutableStateOf("") }
-    var budget by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf("Birthday") }
+    var title by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Food") }
 
-    val eventTypes = listOf("Birthday", "Wedding", "Social Gathering", "Corporate", "Other")
+    val categories = listOf("Food", "Venue", "Transport", "Decoration", "Entertainment", "Clothing", "Others")
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = OnSurface,
@@ -59,8 +59,8 @@ fun AddEventScreen(
             }
             Spacer(Modifier.width(4.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("New Event", color = OnSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
-                Text("Fill in the details below", color = Secondary, fontSize = 13.sp)
+                Text("Add Expense", color = OnSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                Text("Record a spending item", color = Secondary, fontSize = 13.sp)
             }
         }
 
@@ -72,36 +72,36 @@ fun AddEventScreen(
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
-                    value = eventName,
-                    onValueChange = { eventName = it },
-                    label = { Text("Event Name") },
-                    placeholder = { Text("e.g. Eleazar's Birthday") },
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Expense Title") },
+                    placeholder = { Text("e.g. Catering service") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors
                 )
 
                 OutlinedTextField(
-                    value = budget,
-                    onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) budget = v },
-                    label = { Text("Total Budget (₦)") },
-                    placeholder = { Text("e.g. 100000") },
+                    value = amount,
+                    onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amount = v },
+                    label = { Text("Amount (₦)") },
+                    placeholder = { Text("e.g. 25000") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Event Type", color = Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                    Text("Category", color = Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        eventTypes.forEach { type ->
+                        categories.forEach { category ->
                             FilterChip(
-                                selected = selectedType == type,
-                                onClick = { selectedType = type },
-                                label = { Text(type, fontSize = 13.sp) },
+                                selected = selectedCategory == category,
+                                onClick = { selectedCategory = category },
+                                label = { Text(category, fontSize = 13.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Black,
                                     selectedLabelColor = Color.White,
@@ -110,7 +110,7 @@ fun AddEventScreen(
                                 ),
                                 border = FilterChipDefaults.filterChipBorder(
                                     enabled = true,
-                                    selected = selectedType == type,
+                                    selected = selectedCategory == category,
                                     borderColor = Border,
                                     selectedBorderColor = Black
                                 )
@@ -121,7 +121,7 @@ fun AddEventScreen(
 
                 Button(
                     onClick = {
-                        onSaveEvent(eventName.trim(), budget.toDoubleOrNull() ?: 0.0, selectedType)
+                        onSaveExpense(title.trim(), selectedCategory, amount.toDoubleOrNull() ?: 0.0)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -133,9 +133,9 @@ fun AddEventScreen(
                         disabledContainerColor = Border,
                         disabledContentColor = Secondary
                     ),
-                    enabled = eventName.isNotBlank() && budget.isNotBlank()
+                    enabled = title.isNotBlank() && amount.isNotBlank()
                 ) {
-                    Text("Create Event", fontWeight = FontWeight.SemiBold)
+                    Text("Save Expense", fontWeight = FontWeight.SemiBold)
                 }
             }
         }

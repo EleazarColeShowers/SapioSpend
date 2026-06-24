@@ -5,13 +5,16 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+// version = 2 after the expenses table was added. fallbackToDestructiveMigration is
+// acceptable here because this is a local-only app — no data syncs to a server.
 @Database(
-    entities = [EventEntity::class],
-    version = 1
+    entities = [EventEntity::class, ExpenseEntity::class],
+    version = 2
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun eventDao(): EventDao
+    abstract fun expenseDao(): ExpenseDao
 
     companion object {
         @Volatile
@@ -23,7 +26,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "sapio_spend_db"
-                ).build().also { INSTANCE = it }
+                )
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }
