@@ -10,8 +10,10 @@ import org.junit.Test
 // the same formulas directly — no Android context or ViewModel needed.
 class BudgetCalculationsTest {
 
+    // Takes an Int purely for readability in the tests below; ids are strings since the
+    // move to client-generated keys, so it is stringified here.
     private fun makeExpense(eventId: Int, category: String, amount: Double) =
-        ExpenseEntity(id = 0, eventId = eventId, title = "item", category = category, amount = amount)
+        ExpenseEntity(eventId = eventId.toString(), title = "item", category = category, amount = amount)
 
     @Test
     fun `remaining is budget minus total spent`() {
@@ -106,7 +108,7 @@ class BudgetCalculationsTest {
             makeExpense(2, "Venue", 50_000.0),
             makeExpense(1, "Decoration", 8_000.0)
         )
-        val event1Expenses = allExpenses.filter { it.eventId == 1 }
+        val event1Expenses = allExpenses.filter { it.eventId == "1" }
         assertEquals(2, event1Expenses.size)
         assertEquals(18_000.0, event1Expenses.sumOf { it.amount }, 0.01)
     }

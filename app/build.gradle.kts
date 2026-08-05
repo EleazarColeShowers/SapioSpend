@@ -35,7 +35,16 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG gates the developer-only Pro unlock in the paywall, which
+        // must never be reachable in a release build.
+        buildConfig = true
     }
+}
+
+// Exported schemas are what MigrationTestHelper diffs against, and the record of what
+// shipped to users. Required now that the database migrates rather than resets.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

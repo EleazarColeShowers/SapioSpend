@@ -5,16 +5,22 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-// version = 2 after the expenses table was added. fallbackToDestructiveMigration is
-// acceptable here because this is a local-only app — no data syncs to a server.
+/**
+ * version 4 introduced client-generated ids, soft deletes and budget_lines.
+ *
+ * There is deliberately no destructive-migration fallback. Once a plan is paid for,
+ * dropping the database on a schema change means a planner loses the expense history
+ * for a live event — every version bump from here needs a real Migration.
+ */
 @Database(
-    entities = [EventEntity::class, ExpenseEntity::class],
-    version = 2
+    entities = [EventEntity::class, ExpenseEntity::class, BudgetLineEntity::class],
+    version = 4
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun eventDao(): EventDao
     abstract fun expenseDao(): ExpenseDao
+    abstract fun budgetLineDao(): BudgetLineDao
 
     companion object {
         @Volatile
@@ -27,7 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sapio_spend_db"
                 )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .addMigrations(MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }

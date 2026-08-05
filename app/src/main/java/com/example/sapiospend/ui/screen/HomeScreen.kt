@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,25 +20,34 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.sapiospend.billing.Plan
+import com.example.sapiospend.export.ExportFormat
+import com.example.sapiospend.export.ReportBuilder
+import com.example.sapiospend.ui.component.ExportMenu
+import com.example.sapiospend.ui.component.PaywallTrigger
+import com.example.sapiospend.ui.theme.AppColors
 import com.example.sapiospend.ui.viewmodel.EventViewModel
-
-private val BG = Color(0xFFF5F5F5)
-private val Surface = Color(0xFFFFFFFF)
-private val OnSurface = Color(0xFF111111)
-private val Secondary = Color(0xFF6B7280)
-private val Border = Color(0xFFE5E7EB)
-private val Black = Color(0xFF111111)
-private val Success = Color(0xFF16A34A)
-private val Danger = Color(0xFFDC2626)
+import com.example.sapiospend.ui.viewmodel.ExportViewModel
+import com.example.sapiospend.util.formatDate
+import com.example.sapiospend.util.formatNaira
 
 @Composable
 fun HomeScreen(
     onAddEventClick: () -> Unit = {},
-    onEventClick: (Int) -> Unit = {},
-    eventViewModel: EventViewModel
+    onEventClick: (String) -> Unit = {},
+    onAnalyticsClick: () -> Unit = {},
+    onRequirePro: (PaywallTrigger) -> Unit = {},
+    eventViewModel: EventViewModel,
+    exportViewModel: ExportViewModel
 ) {
     val events by eventViewModel.events.collectAsState()
     val allExpenses by eventViewModel.allExpenses.collectAsState()
+    val budgetLines by eventViewModel.budgetLines.collectAsState()
+    val plan by eventViewModel.plan.collectAsState()
+    val remainingFreeEvents by eventViewModel.remainingFreeEvents.collectAsState()
+    val isExporting by exportViewModel.isExporting.collectAsState()
+
+    val isPro = plan == Plan.PRO
 
     val totalBudget = events.sumOf { it.budget }
     val totalSpent = allExpenses.sumOf { it.amount }
@@ -46,7 +56,7 @@ fun HomeScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(BG)
+            .background(AppColors.BG)
     ) {
         LazyColumn(
             Modifier
@@ -56,15 +66,85 @@ fun HomeScreen(
             contentPadding = PaddingValues(top = 28.dp, bottom = 100.dp)
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "SapioSpend",
-                        color = OnSurface,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.5).sp
-                    )
-                    Text("Event budget planner", color = Secondary, fontSize = 14.sp)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "SapioSpend",
+                                color = AppColors.OnSurface,
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.5).sp
+                            )
+                            if (isPro) {
+                                Box(
+                                    Modifier
+                                        .background(AppColors.Black, RoundedCornerShape(5.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("PRO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                                }
+                            }
+                        }
+                        Text("Event budget planner", color = AppColors.Secondary, fontSize = 14.sp)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onAnalyticsClick) {
+                            Icon(Icons.Default.BarChart, contentDescription = "Analytics", tint = AppColors.Secondary)
+                        }
+                        ExportMenu(
+                            isPro = isPro,
+                            isExporting = isExporting,
+                            onExport = { format ->
+                                exportViewModel.export(
+                                    ReportBuilder.forAllEvents(events, allExpenses, budgetLines),
+                                    format
+                                )
+                            },
+                            onRequirePro = { onRequirePro(PaywallTrigger.EXPORT) }
+                        )
+                    }
+                }
+            }
+
+            // Only shown while the cap is actually close, so it reads as a heads-up
+            // rather than a permanent nag.
+            if (!isPro && remainingFreeEvents in 0..1) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = AppColors.Warning.copy(alpha = 0.08f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (remainingFreeEvents == 0) "You've used all 3 free events"
+                                else "1 free event left",
+                                color = AppColors.Warning,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Upgrade",
+                                color = AppColors.Warning,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onRequirePro(PaywallTrigger.EVENT_LIMIT) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -72,7 +152,7 @@ fun HomeScreen(
 
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Black),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.Black),
                     shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.fillMaxWidth(),
                     elevation = CardDefaults.cardElevation(0.dp)
@@ -83,11 +163,11 @@ fun HomeScreen(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            OverviewStat("Budget", "₦${totalBudget.toInt()}", Color.White)
-                            OverviewStat("Spent", "₦${totalSpent.toInt()}", Color(0xFFFF6B6B))
+                            OverviewStat("Budget", totalBudget.formatNaira(), Color.White)
+                            OverviewStat("Spent", totalSpent.formatNaira(), Color(0xFFFF6B6B))
                             OverviewStat(
                                 "Remaining",
-                                "₦${remaining.toInt()}",
+                                remaining.formatNaira(),
                                 if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
                             )
                         }
@@ -112,7 +192,7 @@ fun HomeScreen(
             if (events.isEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.fillMaxWidth(),
                         elevation = CardDefaults.cardElevation(0.dp)
@@ -127,13 +207,13 @@ fun HomeScreen(
                             Icon(
                                 Icons.Default.AccountBalance,
                                 contentDescription = null,
-                                tint = Border,
+                                tint = AppColors.Border,
                                 modifier = Modifier.size(40.dp)
                             )
-                            Text("No events yet", color = OnSurface, fontWeight = FontWeight.SemiBold)
+                            Text("No events yet", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold)
                             Text(
                                 "Tap + to create your first event",
-                                color = Secondary,
+                                color = AppColors.Secondary,
                                 fontSize = 13.sp
                             )
                         }
@@ -143,7 +223,7 @@ fun HomeScreen(
                 item {
                     Text(
                         "Events  ${events.size}",
-                        color = Secondary,
+                        color = AppColors.Secondary,
                         fontSize = 12.sp,
                         letterSpacing = 0.5.sp
                     )
@@ -155,7 +235,7 @@ fun HomeScreen(
                     val overBudget = eventSpent > event.budget
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -171,37 +251,38 @@ fun HomeScreen(
                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
                                         event.name,
-                                        color = OnSurface,
+                                        color = AppColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 15.sp
                                     )
-                                    Text(event.eventType, color = Secondary, fontSize = 12.sp)
+                                    Text(
+                                        "${event.eventType} · ${event.dateCreated.formatDate()}",
+                                        color = AppColors.Secondary,
+                                        fontSize = 12.sp
+                                    )
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     if (overBudget) {
                                         Box(
                                             Modifier
-                                                .background(Danger.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                                .background(AppColors.Danger.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                         ) {
-                                            Text("Over budget", color = Danger, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                            Text("Over budget", color = AppColors.Danger, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                         }
                                     }
-                                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Border, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = AppColors.Border, modifier = Modifier.size(20.dp))
                                 }
                             }
 
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(0.dp)
-                            ) {
-                                MiniStat("Budget", "₦${event.budget.toInt()}", Modifier.weight(1f))
-                                MiniStat("Spent", "₦${eventSpent.toInt()}", Modifier.weight(1f))
+                            Row(Modifier.fillMaxWidth()) {
+                                MiniStat("Budget", event.budget.formatNaira(), Modifier.weight(1f))
+                                MiniStat("Spent", eventSpent.formatNaira(), Modifier.weight(1f))
                                 MiniStat(
                                     "Left",
-                                    "₦${eventRemaining.toInt()}",
+                                    eventRemaining.formatNaira(),
                                     Modifier.weight(1f),
-                                    valueColor = if (overBudget) Danger else Success
+                                    valueColor = if (overBudget) AppColors.Danger else AppColors.Success
                                 )
                             }
 
@@ -211,8 +292,8 @@ fun HomeScreen(
                                     .fillMaxWidth()
                                     .height(3.dp)
                                     .clip(RoundedCornerShape(50)),
-                                color = if (overBudget) Danger else Black,
-                                trackColor = Border
+                                color = if (overBudget) AppColors.Danger else AppColors.Black,
+                                trackColor = AppColors.Border
                             )
                         }
                     }
@@ -221,8 +302,13 @@ fun HomeScreen(
         }
 
         FloatingActionButton(
-            onClick = onAddEventClick,
-            containerColor = Black,
+            // Checked here as well as in the ViewModel so a capped user meets the paywall
+            // before filling in a form that cannot be saved.
+            onClick = {
+                if (isPro || remainingFreeEvents != 0) onAddEventClick()
+                else onRequirePro(PaywallTrigger.EVENT_LIMIT)
+            },
+            containerColor = AppColors.Black,
             contentColor = Color.White,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
@@ -247,10 +333,10 @@ private fun MiniStat(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: Color = OnSurface
+    valueColor: Color = AppColors.OnSurface
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = Secondary, fontSize = 10.sp)
+        Text(label, color = AppColors.Secondary, fontSize = 10.sp)
         Text(value, color = valueColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
     }
 }
