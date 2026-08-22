@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Three ascending bars: the app is budget planned-vs-actual, so the mark is the chart.
-  The accent on the tallest bar is AppColors.Success (#16A34A).
-
-  Geometry is confined to the centre 72dp of the 108dp canvas, so nothing is clipped by
-  the circle / squircle / rounded-square masks different launchers apply. Every corner of
-  every bar sits within 29 units of centre, inside the 33-unit guaranteed-safe radius.
+  Themed-icon (Android 13+) variant. The system discards colour and tints by alpha, so the
+  foreground's 0.50/0.78 bar alphas would come through as washed-out greys. Same geometry,
+  fully opaque, letting height alone carry the ascent.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -14,13 +11,11 @@
     android:viewportHeight="108">
     <path
         android:fillColor="#FFFFFF"
-        android:fillAlpha="0.50"
         android:pathData="M34.02,62.1 A4.86,4.86 0 0 1 43.74,62.1 L43.74,68.94 A4.86,4.86 0 0 1 34.02,68.94 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:fillAlpha="0.78"
         android:pathData="M49.14,52.74 A4.86,4.86 0 0 1 58.86,52.74 L58.86,68.94 A4.86,4.86 0 0 1 49.14,68.94 Z" />
     <path
-        android:fillColor="#16A34A"
+        android:fillColor="#FFFFFF"
         android:pathData="M64.26,43.38 A4.86,4.86 0 0 1 73.98,43.38 L73.98,68.94 A4.86,4.86 0 0 1 64.26,68.94 Z" />
 </vector>

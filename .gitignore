@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing. The upload key and its passwords must never be committed.
+*.jks
+*.keystore
+keystore.properties
