@@ -25,8 +25,9 @@ import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 import kotlin.math.abs
+import com.el.sapiospend.settings.ActiveCurrency
 
 /**
  * Where the *planned* half of a budget gets written.
@@ -117,7 +118,7 @@ fun BudgetPlanScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp
                 )
-                Text("${event.name} · ${event.budget.formatNaira()}", color = AppColors.Secondary, fontSize = 13.sp)
+                Text("${event.name} · ${event.budget.formatMoney()}", color = AppColors.Secondary, fontSize = 13.sp)
             }
         }
 
@@ -129,11 +130,11 @@ fun BudgetPlanScreen(
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    PlanStat("Budget", event.budget.formatNaira(), Color.White)
-                    PlanStat("Planned", planned.formatNaira(), Color.White)
+                    PlanStat("Budget", event.budget.formatMoney(), Color.White)
+                    PlanStat("Planned", planned.formatMoney(), Color.White)
                     PlanStat(
                         if (overAllocated) "Over by" else "Unallocated",
-                        abs(unallocated).formatNaira(),
+                        abs(unallocated).formatMoney(),
                         if (overAllocated) Color(0xFFFF6B6B) else Color(0xFF6EE7B7)
                     )
                 }
@@ -234,7 +235,7 @@ fun BudgetPlanScreen(
                                     rows = currentRows.map { if (it.id == row.id) it.copy(amount = value) else it }
                                 }
                             },
-                            placeholder = { Text("₦", fontSize = 13.sp) },
+                            placeholder = { Text(ActiveCurrency.value.symbol, fontSize = 13.sp) },
                             modifier = Modifier.width(120.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = fieldColors,

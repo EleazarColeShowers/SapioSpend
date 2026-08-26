@@ -30,6 +30,7 @@ import com.el.sapiospend.ui.component.DayCalendarDialog
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.util.DateUtils
 import com.el.sapiospend.util.formatDate
+import com.el.sapiospend.settings.ActiveCurrency
 
 /**
  * One form for recording an expense and for correcting one.
@@ -177,7 +178,7 @@ fun ExpenseFormScreen(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amount = v },
-                    label = { Text("Amount (₦)") },
+                    label = { Text("Amount (${ActiveCurrency.value.symbol})") },
                     placeholder = { Text("e.g. 25000") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),

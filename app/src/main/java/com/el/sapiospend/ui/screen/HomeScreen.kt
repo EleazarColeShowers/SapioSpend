@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,13 +32,14 @@ import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 
 @Composable
 fun HomeScreen(
     onAddEventClick: () -> Unit = {},
     onEventClick: (String) -> Unit = {},
     onAnalyticsClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     onRequirePro: (PaywallTrigger) -> Unit = {},
     eventViewModel: EventViewModel,
     exportViewModel: ExportViewModel
@@ -110,6 +112,9 @@ fun HomeScreen(
                             },
                             onRequirePro = { onRequirePro(PaywallTrigger.EXPORT) }
                         )
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = AppColors.Secondary)
+                        }
                     }
                 }
             }
@@ -165,11 +170,11 @@ fun HomeScreen(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            OverviewStat("Budget", totalBudget.formatNaira(), Color.White)
-                            OverviewStat("Spent", totalSpent.formatNaira(), Color(0xFFFF6B6B))
+                            OverviewStat("Budget", totalBudget.formatMoney(), Color.White)
+                            OverviewStat("Spent", totalSpent.formatMoney(), Color(0xFFFF6B6B))
                             OverviewStat(
                                 "Remaining",
-                                remaining.formatNaira(),
+                                remaining.formatMoney(),
                                 if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
                             )
                         }
@@ -280,11 +285,11 @@ fun HomeScreen(
                             }
 
                             Row(Modifier.fillMaxWidth()) {
-                                MiniStat("Budget", event.budget.formatNaira(), Modifier.weight(1f))
-                                MiniStat("Spent", eventSpent.formatNaira(), Modifier.weight(1f))
+                                MiniStat("Budget", event.budget.formatMoney(), Modifier.weight(1f))
+                                MiniStat("Spent", eventSpent.formatMoney(), Modifier.weight(1f))
                                 MiniStat(
                                     "Left",
-                                    eventRemaining.formatNaira(),
+                                    eventRemaining.formatMoney(),
                                     Modifier.weight(1f),
                                     valueColor = if (overBudget) AppColors.Danger else AppColors.Success
                                 )

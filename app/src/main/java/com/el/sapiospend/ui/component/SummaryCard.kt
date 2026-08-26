@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.el.sapiospend.util.formatMoney
 
 @Composable
 fun SummaryCard(title: String, amount: Double, color: Color) {
@@ -23,7 +24,7 @@ fun SummaryCard(title: String, amount: Double, color: Color) {
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(title, color = Color(0xFF6B7280), fontSize = 12.sp)
-            Text("₦${amount.toInt()}", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(amount.formatMoney(), color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

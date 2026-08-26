@@ -16,6 +16,9 @@ sealed class Routes(val route: String) {
     /** Portfolio-wide analytics across every event. */
     data object Analytics : Routes("analytics")
 
+    /** App preferences — currency today, whatever else accumulates later. */
+    data object Settings : Routes("settings")
+
     /** Detail screen showing budget breakdown and expenses for a single event. */
     data object EventDetail : Routes("event_detail/{eventId}") {
         fun createRoute(eventId: String) = "event_detail/$eventId"

@@ -17,6 +17,7 @@ import androidx.navigation.navArgument
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
 import com.el.sapiospend.ui.component.PaywallSheet
+import com.el.sapiospend.settings.SettingsRepository
 import com.el.sapiospend.ui.component.PaywallTrigger
 import com.el.sapiospend.ui.screen.AddEventScreen
 import com.el.sapiospend.ui.screen.ExpenseFormScreen
@@ -24,6 +25,7 @@ import com.el.sapiospend.ui.screen.AnalyticsScreen
 import com.el.sapiospend.ui.screen.BudgetPlanScreen
 import com.el.sapiospend.ui.screen.EventDetailScreen
 import com.el.sapiospend.ui.screen.HomeScreen
+import com.el.sapiospend.ui.screen.SettingsScreen
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.ui.viewmodel.UiMessage
@@ -34,7 +36,8 @@ import com.el.sapiospend.ui.viewmodel.UiMessage
 fun AppNavGraph(
     navController: NavHostController,
     eventViewModel: EventViewModel,
-    exportViewModel: ExportViewModel
+    exportViewModel: ExportViewModel,
+    settingsRepository: SettingsRepository
 ) {
     val context = LocalContext.current
     val plan by eventViewModel.plan.collectAsState()
@@ -80,6 +83,7 @@ fun AppNavGraph(
                     if (proUnlocked) navController.navigate(Routes.Analytics.route)
                     else paywallTrigger = PaywallTrigger.ANALYTICS
                 },
+                onSettingsClick = { navController.navigate(Routes.Settings.route) },
                 onRequirePro = { trigger -> paywallTrigger = trigger },
                 eventViewModel = eventViewModel,
                 exportViewModel = exportViewModel
@@ -103,6 +107,15 @@ fun AppNavGraph(
                 onBack = { navController.popBackStack() },
                 onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
                 eventViewModel = eventViewModel
+            )
+        }
+
+        composable(Routes.Settings.route) {
+            val currency by settingsRepository.currency.collectAsState()
+            SettingsScreen(
+                currency = currency,
+                onCurrencyChange = settingsRepository::setCurrency,
+                onBack = { navController.popBackStack() }
             )
         }
 

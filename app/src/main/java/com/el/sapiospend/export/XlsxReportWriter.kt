@@ -1,5 +1,6 @@
 package com.el.sapiospend.export
 
+import com.el.sapiospend.settings.ActiveCurrency
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
 import java.io.OutputStream
@@ -32,6 +33,9 @@ object XlsxReportWriter {
         val rows = mutableListOf<List<XlsxWriter.Cell>>()
         rows += row(text("SapioSpend — ${report.title}"))
         rows += row(text("Generated"), text(report.generatedAt.formatDate()))
+        // The cells hold bare numbers so the planner can sum them, which leaves the
+        // unit unstated — say it once here rather than on every amount.
+        rows += row(text("Currency"), text(ActiveCurrency.value.code))
         rows += emptyRow()
         rows += row(text("Event"), text("Type"), text("Budget"), text("Planned"), text("Spent"), text("Remaining"), text("% Used"), text("Status"))
 
@@ -81,6 +85,7 @@ object XlsxReportWriter {
 
         rows += row(text(a.eventName))
         rows += row(text("Type"), text(a.eventType))
+        rows += row(text("Currency"), text(ActiveCurrency.value.code))
         rows += row(text("Budget"), number(a.budget))
         rows += row(text("Planned"), number(a.totalPlanned))
         rows += row(text("Spent"), number(a.totalSpent))

@@ -6,7 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.el.sapiospend.util.formatDate
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.util.formatPeriod
 import java.io.OutputStream
 
@@ -58,9 +58,9 @@ object PdfReportWriter {
 
         report.portfolio?.let { portfolio ->
             cursor.text("Portfolio Summary", headingPaint, gapBefore = 16f)
-            cursor.keyValue("Total budget", portfolio.totalBudget.formatNaira())
-            cursor.keyValue("Total spent", portfolio.totalSpent.formatNaira())
-            cursor.keyValue("Remaining", portfolio.totalRemaining.formatNaira())
+            cursor.keyValue("Total budget", portfolio.totalBudget.formatMoney())
+            cursor.keyValue("Total spent", portfolio.totalSpent.formatMoney())
+            cursor.keyValue("Remaining", portfolio.totalRemaining.formatMoney())
             cursor.keyValue("Events", "${portfolio.eventCount} (${portfolio.overBudgetCount} over budget)")
         }
 
@@ -75,24 +75,24 @@ object PdfReportWriter {
                 gapBefore = 4f
             )
 
-            cursor.keyValue("Budget", a.budget.formatNaira(), gapBefore = 10f)
-            cursor.keyValue("Planned", a.totalPlanned.formatNaira())
-            cursor.keyValue("Spent", a.totalSpent.formatNaira())
+            cursor.keyValue("Budget", a.budget.formatMoney(), gapBefore = 10f)
+            cursor.keyValue("Planned", a.totalPlanned.formatMoney())
+            cursor.keyValue("Spent", a.totalSpent.formatMoney())
             cursor.keyValue(
                 "Remaining",
-                a.remaining.formatNaira(),
+                a.remaining.formatMoney(),
                 valuePaint = if (a.isOverBudget) dangerPaint else bodyBoldPaint
             )
-            cursor.keyValue("Daily burn rate", a.dailyBurnRate.formatNaira())
+            cursor.keyValue("Daily burn rate", a.dailyBurnRate.formatMoney())
 
             // Period figures only for a dated budget — see EventAnalytics.hasPeriod.
             formatPeriod(a.periodStart, a.periodEnd)?.let { cursor.keyValue("Period", it) }
             a.daysRemaining?.let { cursor.keyValue("Days remaining", "$it") }
-            a.safeDailySpend?.let { cursor.keyValue("Safe daily spend", maxOf(it, 0.0).formatNaira()) }
+            a.safeDailySpend?.let { cursor.keyValue("Safe daily spend", maxOf(it, 0.0).formatMoney()) }
             a.projectedTotalSpend?.let {
                 cursor.keyValue(
                     "Projected at this pace",
-                    it.formatNaira(),
+                    it.formatMoney(),
                     valuePaint = if (a.projectedOverspend != null) dangerPaint else bodyBoldPaint
                 )
             }
@@ -105,9 +105,9 @@ object PdfReportWriter {
                     cursor.tableRow(
                         listOf(
                             category.category,
-                            category.planned.formatNaira(),
-                            category.actual.formatNaira(),
-                            category.variance.formatNaira()
+                            category.planned.formatMoney(),
+                            category.actual.formatMoney(),
+                            category.variance.formatMoney()
                         ),
                         if (category.isOverPlan) dangerPaint else bodyPaint,
                         gapBefore = 6f
@@ -125,7 +125,7 @@ object PdfReportWriter {
                             expense.dateCreated.formatDate(),
                             expense.title,
                             expense.category,
-                            expense.amount.formatNaira()
+                            expense.amount.formatMoney()
                         ),
                         bodyPaint,
                         gapBefore = 6f

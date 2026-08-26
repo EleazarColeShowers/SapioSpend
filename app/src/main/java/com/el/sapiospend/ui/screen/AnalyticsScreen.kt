@@ -26,7 +26,7 @@ import com.el.sapiospend.ui.component.SpendTrendChart
 import com.el.sapiospend.ui.component.shareSlices
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 
 @Composable
 fun AnalyticsScreen(
@@ -116,11 +116,11 @@ fun AnalyticsScreen(
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("Portfolio", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            PortfolioStat("Budget", portfolio.totalBudget.formatNaira(), Color.White)
-                            PortfolioStat("Spent", portfolio.totalSpent.formatNaira(), Color(0xFFFF6B6B))
+                            PortfolioStat("Budget", portfolio.totalBudget.formatMoney(), Color.White)
+                            PortfolioStat("Spent", portfolio.totalSpent.formatMoney(), Color(0xFFFF6B6B))
                             PortfolioStat(
                                 "Remaining",
-                                portfolio.totalRemaining.formatNaira(),
+                                portfolio.totalRemaining.formatMoney(),
                                 if (portfolio.totalRemaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
                             )
                         }
@@ -204,11 +204,11 @@ fun AnalyticsScreen(
                         }
 
                         Row(Modifier.fillMaxWidth()) {
-                            AnalyticsStat("Spent", analytics.totalSpent.formatNaira(), Modifier.weight(1f))
-                            AnalyticsStat("Per day", analytics.dailyBurnRate.formatNaira(), Modifier.weight(1f))
+                            AnalyticsStat("Spent", analytics.totalSpent.formatMoney(), Modifier.weight(1f))
+                            AnalyticsStat("Per day", analytics.dailyBurnRate.formatMoney(), Modifier.weight(1f))
                             AnalyticsStat(
                                 "Left",
-                                analytics.remaining.formatNaira(),
+                                analytics.remaining.formatMoney(),
                                 Modifier.weight(1f),
                                 valueColor = if (analytics.isOverBudget) AppColors.Danger else AppColors.Success
                             )
@@ -230,7 +230,7 @@ fun AnalyticsScreen(
                                     "Safe per day",
                                     // A negative allowance is nonsense to display; once
                                     // the money is gone the honest figure is zero.
-                                    maxOf(safeDaily, 0.0).formatNaira(),
+                                    maxOf(safeDaily, 0.0).formatMoney(),
                                     Modifier.weight(1f),
                                     valueColor = if (safeDaily <= 0) AppColors.Danger else AppColors.OnSurface
                                 )
@@ -244,7 +244,7 @@ fun AnalyticsScreen(
 
                             analytics.projectedOverspend?.let { overspend ->
                                 Text(
-                                    "At this pace you finish ${overspend.formatNaira()} over budget",
+                                    "At this pace you finish ${overspend.formatMoney()} over budget",
                                     color = AppColors.Danger,
                                     fontSize = 11.sp
                                 )
@@ -253,7 +253,7 @@ fun AnalyticsScreen(
 
                         analytics.biggestOverrun?.let { overrun ->
                             Text(
-                                "${overrun.category} is ${overrun.variance.formatNaira()} over plan",
+                                "${overrun.category} is ${overrun.variance.formatMoney()} over plan",
                                 color = AppColors.Danger,
                                 fontSize = 11.sp
                             )
@@ -261,7 +261,7 @@ fun AnalyticsScreen(
 
                         if (analytics.unallocated > 0 && analytics.totalPlanned > 0) {
                             Text(
-                                "${analytics.unallocated.formatNaira()} of the budget is unallocated",
+                                "${analytics.unallocated.formatMoney()} of the budget is unallocated",
                                 color = AppColors.Secondary,
                                 fontSize = 11.sp
                             )

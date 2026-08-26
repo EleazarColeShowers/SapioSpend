@@ -14,15 +14,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,6 +35,7 @@ import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
+import com.el.sapiospend.domain.search.ExpenseSearch
 import com.el.sapiospend.domain.template.EventTypes
 import com.el.sapiospend.export.ReportBuilder
 import com.el.sapiospend.ui.component.ExportMenu
@@ -43,7 +47,8 @@ import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
+import com.el.sapiospend.settings.ActiveCurrency
 
 @Composable
 fun EventDetailScreen(
@@ -56,6 +61,8 @@ fun EventDetailScreen(
     eventViewModel: EventViewModel,
     exportViewModel: ExportViewModel
 ) {
+    val focusManager = LocalFocusManager.current
+
     val events by eventViewModel.events.collectAsState()
     val allExpenses by eventViewModel.allExpenses.collectAsState()
     val allBudgetLines by eventViewModel.budgetLines.collectAsState()
@@ -65,7 +72,17 @@ fun EventDetailScreen(
     val proUnlocked = PlanRules.proFeaturesUnlocked(plan)
 
     val event = events.find { it.id == eventId }
-    val expenses = allExpenses.filter { it.eventId == eventId }
+    val expenses = remember(allExpenses, eventId) { allExpenses.filter { it.eventId == eventId } }
+
+    /**
+     * Held here rather than in the ViewModel because it is screen state — leaving the
+     * event should forget the search, not restore it. The matching rules themselves live
+     * in [ExpenseSearch].
+     */
+    var expenseQuery by remember { mutableStateOf("") }
+    val visibleExpenses = remember(expenses, expenseQuery) {
+        ExpenseSearch.filter(expenses, expenseQuery)
+    }
 
     val totalSpent = expenses.sumOf { it.amount }
     val budget = event?.budget ?: 0.0
@@ -180,7 +197,7 @@ fun EventDetailScreen(
                     OutlinedTextField(
                         value = editBudget,
                         onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) editBudget = v },
-                        label = { Text("Total Budget (₦)") },
+                        label = { Text("Total Budget (${ActiveCurrency.value.symbol})") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -365,11 +382,11 @@ fun EventDetailScreen(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            BudgetStat("Budget", budget.formatNaira(), Color.White)
-                            BudgetStat("Spent", totalSpent.formatNaira(), Color(0xFFFF6B6B))
+                            BudgetStat("Budget", budget.formatMoney(), Color.White)
+                            BudgetStat("Spent", totalSpent.formatMoney(), Color(0xFFFF6B6B))
                             BudgetStat(
                                 "Remaining",
-                                remaining.formatNaira(),
+                                remaining.formatMoney(),
                                 if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
                             )
                         }
@@ -403,7 +420,7 @@ fun EventDetailScreen(
                                     append(if (analytics.isPeriodOver) "Period closed" else "$daysLeft days left")
                                     append(" · ")
                                     append(
-                                        if (safeDaily > 0) "${safeDaily.formatNaira()} a day left to spend"
+                                        if (safeDaily > 0) "${safeDaily.formatMoney()} a day left to spend"
                                         else "nothing left for the rest of the period"
                                     )
                                 },
@@ -466,12 +483,63 @@ fun EventDetailScreen(
             }
 
             item {
-                Text(
-                    "Expenses  ${expenses.size}",
-                    color = AppColors.Secondary,
-                    fontSize = 12.sp,
-                    letterSpacing = 0.5.sp
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        // While a search is running the count says how much of the list
+                        // is hidden, so a filtered view can never be mistaken for the
+                        // whole record of what was spent.
+                        if (expenseQuery.isBlank()) "Expenses  ${expenses.size}"
+                        else "Expenses  ${visibleExpenses.size} of ${expenses.size}",
+                        color = AppColors.Secondary,
+                        fontSize = 12.sp,
+                        letterSpacing = 0.5.sp
+                    )
+
+                    if (expenses.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = expenseQuery,
+                            onValueChange = { expenseQuery = it },
+                            placeholder = { Text("Search title, category or notes", fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = AppColors.Border,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                if (expenseQuery.isNotEmpty()) {
+                                    IconButton(onClick = { expenseQuery = "" }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Clear search",
+                                            tint = AppColors.Secondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = AppColors.OnSurface,
+                                unfocusedTextColor = AppColors.OnSurface,
+                                focusedPlaceholderColor = AppColors.Border,
+                                unfocusedPlaceholderColor = AppColors.Border,
+                                focusedBorderColor = AppColors.Black,
+                                unfocusedBorderColor = AppColors.Border,
+                                cursorColor = AppColors.Black,
+                                focusedContainerColor = AppColors.Surface,
+                                unfocusedContainerColor = AppColors.Surface
+                            )
+                        )
+                    }
+                }
             }
 
             if (expenses.isEmpty()) {
@@ -495,8 +563,37 @@ fun EventDetailScreen(
                         }
                     }
                 }
+            } else if (visibleExpenses.isEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Column(
+                            Modifier
+                                .padding(28.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "No expense matches \"${expenseQuery.trim()}\"",
+                                color = AppColors.OnSurface,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "Searched titles, categories and notes",
+                                color = AppColors.Secondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
             } else {
-                items(expenses, key = { it.id }) { expense ->
+                items(visibleExpenses, key = { it.id }) { expense ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
                         shape = RoundedCornerShape(12.dp),
@@ -531,7 +628,7 @@ fun EventDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    expense.amount.formatNaira(),
+                                    expense.amount.formatMoney(),
                                     color = AppColors.OnSurface,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp

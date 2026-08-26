@@ -36,8 +36,9 @@ import com.el.sapiospend.ui.component.PeriodCalendarDialog
 import com.el.sapiospend.ui.component.ProBadge
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.util.DateUtils
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.util.formatPeriod
+import com.el.sapiospend.settings.ActiveCurrency
 
 /**
  * Period shortcuts. A salary earner wants "this month" in one tap; everyone else wants a
@@ -301,7 +302,7 @@ fun AddEventScreen(
                         OutlinedTextField(
                             value = budget,
                             onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) budget = v },
-                            label = { Text(if (isPersonal) "Take-Home Pay (₦)" else "Total Budget (₦)") },
+                            label = { Text(if (isPersonal) "Take-Home Pay (${ActiveCurrency.value.symbol})" else "Total Budget (${ActiveCurrency.value.symbol})") },
                             placeholder = { Text("e.g. 100000") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -517,7 +518,7 @@ private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(allocation.category, color = AppColors.Secondary, fontSize = 12.sp)
                     Text(
-                        allocation.amount.formatNaira(),
+                        allocation.amount.formatMoney(),
                         color = AppColors.OnSurface,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -584,7 +585,7 @@ private fun CustomPlanEditor(
                                 onChange(categories.map { if (it.id == category.id) it.copy(amount = value) else it })
                             }
                         },
-                        placeholder = { Text("₦", fontSize = 13.sp) },
+                        placeholder = { Text(ActiveCurrency.value.symbol, fontSize = 13.sp) },
                         modifier = Modifier.width(120.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = fieldColors,
@@ -627,12 +628,12 @@ private fun CustomPlanEditor(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Allocated", color = AppColors.Secondary, fontSize = 13.sp)
-                Text(planned.formatNaira(), color = AppColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(planned.formatMoney(), color = AppColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (overBudget) "Over budget by" else "Remaining", color = AppColors.Secondary, fontSize = 13.sp)
                 Text(
-                    kotlin.math.abs(unallocated).formatNaira(),
+                    kotlin.math.abs(unallocated).formatMoney(),
                     color = if (overBudget) AppColors.Danger else AppColors.Success,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -645,7 +646,7 @@ private fun CustomPlanEditor(
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
-                        "Use ${planned.formatNaira()} as the total budget",
+                        "Use ${planned.formatMoney()} as the total budget",
                         color = AppColors.Black,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium

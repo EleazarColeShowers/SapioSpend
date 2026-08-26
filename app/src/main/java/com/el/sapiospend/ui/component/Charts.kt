@@ -28,7 +28,7 @@ import com.el.sapiospend.domain.analytics.CategoryBreakdown
 import com.el.sapiospend.domain.analytics.MonthlySpend
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.theme.ChartColors
-import com.el.sapiospend.util.formatNaira
+import com.el.sapiospend.util.formatMoney
 
 /**
  * The app's charts, drawn on a Canvas rather than pulled in from a charting library.
@@ -107,9 +107,9 @@ fun PlannedVsActualChart(
                     // money is not something to make anyone squint at anyway.
                     Text(
                         if (category.planned > 0) {
-                            "${category.actual.formatNaira()} / ${category.planned.formatNaira()}"
+                            "${category.actual.formatMoney()} / ${category.planned.formatMoney()}"
                         } else {
-                            category.actual.formatNaira()
+                            category.actual.formatMoney()
                         },
                         color = if (category.isOverPlan) AppColors.Danger else AppColors.Secondary,
                         fontSize = 12.sp
@@ -177,7 +177,7 @@ fun SpendTrendChart(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                selected.total.formatNaira(),
+                selected.total.formatMoney(),
                 color = AppColors.OnSurface,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
@@ -337,7 +337,7 @@ fun SpendShareChart(
                         fontSize = 11.sp
                     )
                     Text(
-                        slice.amount.formatNaira(),
+                        slice.amount.formatMoney(),
                         color = AppColors.OnSurface,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium

@@ -26,6 +26,8 @@ import com.el.sapiospend.data.local.AppDatabase
 import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.export.ExportManager
 import com.el.sapiospend.navigation.AppNavGraph
+import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.SettingsRepository
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.update.InAppUpdater
@@ -44,6 +46,17 @@ class MainActivity : ComponentActivity() {
         ExportViewModel.factory(ExportManager(applicationContext))
     }
 
+    /**
+     * Seeded into [ActiveCurrency] the moment it is built rather than collected into it,
+     * so the very first frame already formats in the user's currency. A collector alone
+     * would render one frame of naira before catching up, which on a cold start is a
+     * visible flicker of the wrong symbol.
+     */
+    private val settingsRepository: SettingsRepository by lazy {
+        SettingsRepository.create(applicationContext)
+            .also { ActiveCurrency.value = it.currency.value }
+    }
+
     // Constructed here rather than lazily: registering the update flow's result launcher
     // is only legal before the activity starts.
     private lateinit var inAppUpdater: InAppUpdater
@@ -54,6 +67,12 @@ class MainActivity : ComponentActivity() {
         inAppUpdater = InAppUpdater(this)
 
         lifecycleScope.launch { ExportManager(applicationContext).clearCache() }
+
+        // Keeps the process-wide formatting currency in step with the stored setting for
+        // the rest of the session; the initial value is already in place by construction.
+        lifecycleScope.launch {
+            settingsRepository.currency.collect { ActiveCurrency.value = it }
+        }
 
         setContent {
             val navController = rememberNavController()
@@ -83,7 +102,8 @@ class MainActivity : ComponentActivity() {
                 AppNavGraph(
                     navController = navController,
                     eventViewModel = eventViewModel,
-                    exportViewModel = exportViewModel
+                    exportViewModel = exportViewModel,
+                    settingsRepository = settingsRepository
                 )
 
                 SnackbarHost(
