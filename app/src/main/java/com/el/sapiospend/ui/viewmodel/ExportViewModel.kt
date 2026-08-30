@@ -39,8 +39,6 @@ class ExportViewModel(private val exportManager: ExportManager) : ViewModel() {
                 val uri = exportManager.export(report, format)
                 _shareIntent.value = exportManager.shareIntent(uri, format, report.title)
             } catch (e: Exception) {
-                // Storage can be full, or the report can be malformed. Either way the
-                // user gets told rather than watching a spinner stop for no reason.
                 _error.value = e.message ?: "Export failed"
             } finally {
                 _isExporting.value = false

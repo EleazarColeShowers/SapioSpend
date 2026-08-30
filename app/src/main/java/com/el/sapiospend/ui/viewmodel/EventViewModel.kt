@@ -13,6 +13,8 @@ import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.data.local.ExpenseEntity
+import com.el.sapiospend.domain.analytics.BudgetAnalytics
+import com.el.sapiospend.domain.notify.BudgetAlertPublisher
 import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.BudgetTemplate
 import com.el.sapiospend.domain.template.CategoryAmount
@@ -33,7 +35,12 @@ sealed interface UiMessage {
 
 class EventViewModel(
     private val repository: EventRepository,
-    private val entitlements: Entitlements
+    private val entitlements: Entitlements,
+    /**
+     * Notified whenever the budget picture changes. Defaulted to a no-op so tests and
+     * previews construct the ViewModel without an Android context behind them.
+     */
+    alerts: BudgetAlertPublisher = BudgetAlertPublisher.None
 ) : ViewModel() {
 
     val events = repository.events.stateIn(
@@ -54,6 +61,25 @@ class EventViewModel(
     val remainingFreeEvents: StateFlow<Int> = combine(events, plan) { list, currentPlan ->
         PlanRules.remainingFreeEvents(currentPlan, list.size)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FREE_EVENTS_UNKNOWN)
+
+    /**
+     * Watches every write to the budget for a threshold crossing.
+     *
+     * Driven off the same flows the UI reads rather than hooked onto [addExpense],
+     * because an expense being *edited or deleted* changes the totals just as much — and
+     * a correction that takes an event back under budget has to be seen, or the alert
+     * will not fire again when it goes over a second time.
+     *
+     * Whether anything is actually posted is the publisher's business; this side only
+     * knows the numbers moved.
+     */
+    init {
+        viewModelScope.launch {
+            combine(events, allExpenses, budgetLines) { events, expenses, lines ->
+                BudgetAnalytics.portfolio(events, expenses, lines).events
+            }.collect(alerts::publish)
+        }
+    }
 
     private val _message = MutableStateFlow<UiMessage?>(null)
     val message: StateFlow<UiMessage?> = _message.asStateFlow()
@@ -218,9 +244,10 @@ class EventViewModel(
 
         fun factory(
             repository: EventRepository,
-            entitlements: Entitlements
+            entitlements: Entitlements,
+            alerts: BudgetAlertPublisher = BudgetAlertPublisher.None
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { EventViewModel(repository, entitlements) }
+            initializer { EventViewModel(repository, entitlements, alerts) }
         }
     }
 }

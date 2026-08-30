@@ -37,7 +37,12 @@ fun AppNavGraph(
     navController: NavHostController,
     eventViewModel: EventViewModel,
     exportViewModel: ExportViewModel,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    /** Event a tapped notification wants opened, or null on an ordinary launch. */
+    openEventId: String? = null,
+    onEventOpened: () -> Unit = {},
+    notificationsAllowed: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val plan by eventViewModel.plan.collectAsState()
@@ -46,6 +51,17 @@ fun AppNavGraph(
     // The paywall is hoisted here because four different screens can trigger it, and a
     // sheet owned by any one of them would vanish the moment navigation moved on.
     var paywallTrigger by remember { mutableStateOf<PaywallTrigger?>(null) }
+
+    // Handled here rather than in the activity because this is where the graph is: the
+    // activity knows an event id, only the NavHost knows how to get to it. Cleared
+    // immediately so the back button leads out of the detail screen instead of
+    // re-navigating into it on the next recomposition.
+    LaunchedEffect(openEventId) {
+        openEventId?.let {
+            navController.navigate(Routes.EventDetail.createRoute(it))
+            onEventOpened()
+        }
+    }
 
     val message by eventViewModel.message.collectAsState()
     LaunchedEffect(message) {
@@ -112,9 +128,14 @@ fun AppNavGraph(
 
         composable(Routes.Settings.route) {
             val currency by settingsRepository.currency.collectAsState()
+            val notifications by settingsRepository.notifications.collectAsState()
             SettingsScreen(
                 currency = currency,
                 onCurrencyChange = settingsRepository::setCurrency,
+                notifications = notifications,
+                onNotificationsChange = settingsRepository::setNotifications,
+                notificationsAllowed = notificationsAllowed,
+                onRequestNotificationPermission = onRequestNotificationPermission,
                 onBack = { navController.popBackStack() }
             )
         }

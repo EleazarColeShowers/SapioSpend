@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Android 13+ only. Below it, being installed is consent, and the permission does
+         not exist to request. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Alarms do not survive a reboot. Without this the daily reminder tick would be
+         lost the first time the phone restarts and never come back. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -15,6 +23,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.SapioSpend"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -23,6 +32,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The single alarm behind reminders and check-ins, plus the events that would
+             otherwise silently drop it: a reboot, an app update, and the clock or time
+             zone moving under an alarm set for an absolute instant.
+
+             Not exported: only the system and this app have any business waking it. -->
+        <receiver
+            android:name=".notify.DailyTickReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.el.sapiospend.action.DAILY_TICK" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Grants other apps temporary read access to exported reports so the share
              sheet can hand a PDF or spreadsheet to Gmail, WhatsApp or Drive. Not
