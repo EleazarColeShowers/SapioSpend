@@ -43,4 +43,16 @@ class FakeEventDao(private val db: FakeDatabase) : EventDao {
             if (it.eventId == eventId && it.deletedAt == null) it.copy(deletedAt = now, updatedAt = now) else it
         }
     }
+
+    override suspend fun markContributionsDeletedForEvent(eventId: String, now: Long) {
+        db.contributions.value = db.contributions.value.map {
+            if (it.eventId == eventId && it.deletedAt == null) it.copy(deletedAt = now, updatedAt = now) else it
+        }
+    }
+
+    override suspend fun markRecurringDeletedForEvent(eventId: String, now: Long) {
+        db.recurringRules.value = db.recurringRules.value.map {
+            if (it.eventId == eventId && it.deletedAt == null) it.copy(deletedAt = now, updatedAt = now) else it
+        }
+    }
 }

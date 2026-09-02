@@ -44,6 +44,8 @@ interface EventDao {
     suspend fun softDeleteEventCascading(eventId: String, now: Long) {
         markExpensesDeletedForEvent(eventId, now)
         markBudgetLinesDeletedForEvent(eventId, now)
+        markContributionsDeletedForEvent(eventId, now)
+        markRecurringDeletedForEvent(eventId, now)
         markEventDeleted(eventId, now)
     }
 
@@ -55,4 +57,12 @@ interface EventDao {
 
     @Query("UPDATE budget_lines SET deletedAt = :now, updatedAt = :now WHERE eventId = :eventId AND deletedAt IS NULL")
     suspend fun markBudgetLinesDeletedForEvent(eventId: String, now: Long)
+
+    @Query("UPDATE contributions SET deletedAt = :now, updatedAt = :now WHERE eventId = :eventId AND deletedAt IS NULL")
+    suspend fun markContributionsDeletedForEvent(eventId: String, now: Long)
+
+    // A rule left alive against a deleted event would keep materialising expenses into
+    // it — invisible on screen, and back on the totals the moment the event is restored.
+    @Query("UPDATE recurring_expenses SET deletedAt = :now, updatedAt = :now WHERE eventId = :eventId AND deletedAt IS NULL")
+    suspend fun markRecurringDeletedForEvent(eventId: String, now: Long)
 }

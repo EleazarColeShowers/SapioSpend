@@ -61,20 +61,29 @@ private enum class PeriodPreset(val label: String) {
  */
 private enum class WizardStep { TYPE, TEMPLATE, DETAILS }
 
+/**
+ * Everything the wizard collected. A data class rather than an eight-argument callback,
+ * for the same reason [com.el.sapiospend.ui.screen.ExpenseFormResult] is one: the two
+ * nullable dates and a nullable count next to each other are indistinguishable
+ * positionally, and getting them the wrong way round would be silent.
+ */
+data class NewEventInput(
+    val name: String,
+    val budget: Double,
+    val eventType: String,
+    val template: BudgetTemplate?,
+    val customLines: List<CategoryAmount>,
+    val startDate: Long?,
+    val endDate: Long?,
+    val guestCount: Int?
+)
+
 @Composable
 fun AddEventScreen(
     proUnlocked: Boolean = false,
     onBack: () -> Unit = {},
     onRequirePro: () -> Unit = {},
-    onSaveEvent: (
-        name: String,
-        budget: Double,
-        eventType: String,
-        template: BudgetTemplate?,
-        customLines: List<CategoryAmount>,
-        startDate: Long?,
-        endDate: Long?
-    ) -> Unit = { _, _, _, _, _, _, _ -> }
+    onSaveEvent: (NewEventInput) -> Unit = {}
 ) {
     var step by remember { mutableStateOf(WizardStep.TYPE) }
     var selectedType by remember { mutableStateOf(EventTypes.ALL.first()) }
@@ -84,6 +93,7 @@ fun AddEventScreen(
 
     var eventName by remember { mutableStateOf("") }
     var budget by remember { mutableStateOf("") }
+    var guests by remember { mutableStateOf("") }
     var periodPreset by remember { mutableStateOf(PeriodPreset.NONE) }
     var periodStart by remember { mutableStateOf<Long?>(null) }
     var periodEnd by remember { mutableStateOf<Long?>(null) }
@@ -316,6 +326,32 @@ fun AddEventScreen(
                             } else null
                         )
 
+                        // Only for an event: a salary budget has no guests, and a
+                        // cost-per-head figure on one would be nonsense.
+                        if (!isPersonal) {
+                            OutlinedTextField(
+                                value = guests,
+                                onValueChange = { v -> if (v.all { it.isDigit() }) guests = v },
+                                label = { Text("Guests (optional)") },
+                                placeholder = { Text("e.g. 250") },
+                                supportingText = {
+                                    Text(
+                                        guests.toIntOrNull()?.takeIf { it > 0 && budgetValue > 0 }
+                                            ?.let { "${(budgetValue / it).formatMoney()} per guest" }
+                                            ?: "Unlocks cost per head on the analytics screen",
+                                        color = AppColors.Secondary,
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = fieldColors,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                            )
+                        }
+
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 if (isPersonal) "Budget Month" else "Budget Period",
@@ -395,13 +431,20 @@ fun AddEventScreen(
                         Button(
                             onClick = {
                                 onSaveEvent(
-                                    eventName.trim(),
-                                    budgetValue,
-                                    selectedType,
-                                    selectedTemplate,
-                                    if (isCustomPlan) CustomPlan.linesOf(customCategories) else emptyList(),
-                                    periodStart,
-                                    periodEnd
+                                    NewEventInput(
+                                        name = eventName.trim(),
+                                        budget = budgetValue,
+                                        eventType = selectedType,
+                                        template = selectedTemplate,
+                                        customLines = if (isCustomPlan) CustomPlan.linesOf(customCategories) else emptyList(),
+                                        startDate = periodStart,
+                                        endDate = periodEnd,
+                                        // Blank stays null rather than becoming zero: an
+                                        // uncounted event and an event for nobody are
+                                        // different, and only one of them has a cost per
+                                        // head worth showing.
+                                        guestCount = guests.toIntOrNull()?.takeIf { it > 0 }
+                                    )
                                 )
                             },
                             modifier = Modifier

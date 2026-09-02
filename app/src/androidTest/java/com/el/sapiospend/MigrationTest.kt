@@ -11,6 +11,7 @@ import com.el.sapiospend.data.local.AppDatabase
 import com.el.sapiospend.data.local.LocalOwner
 import com.el.sapiospend.data.local.MIGRATION_3_4
 import com.el.sapiospend.data.local.MIGRATION_4_5
+import com.el.sapiospend.data.local.MIGRATION_5_6
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -86,7 +87,7 @@ class MigrationTest {
     // user on the oldest shipped version actually takes.
     private fun openMigrated(): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .build()
             .also { migrated = it }
 
@@ -208,4 +209,25 @@ class MigrationTest {
         assertEquals(1, db.eventDao().getAllEvents().first().size)
         assertTrue(db.expenseDao().getAllExpenses().first().isEmpty())
     }
+
+    @Test
+    fun migrate3To6_leavesLegacyExpensesSettledAndUncounted() = runTest {
+        createVersion3Database { db ->
+            db.execSQL("INSERT INTO events (name, budget, eventType, dateCreated) VALUES ('Wedding', 1000.0, 'Wedding', 1)")
+            db.execSQL("INSERT INTO expenses (eventId, title, category, amount, notes, dateCreated) VALUES (1, 'Catering', 'Food', 250.0, '', 2)")
+        }
+
+        val db = openMigrated()
+        val expense = db.expenseDao().getAllExpenses().first().single()
+
+        // Everything recorded before payment tracking existed was money already gone.
+        // Left at the column default it would come back as a debt the user never owed.
+        assertEquals(250.0, expense.amountPaid, 0.01)
+        assertEquals(0.0, expense.outstanding, 0.01)
+        assertTrue(expense.isSettled)
+        assertNull(expense.dueDate)
+        assertEquals("", expense.vendor)
+        assertNull(db.eventDao().getAllEvents().first().single().guestCount)
+    }
+
 }

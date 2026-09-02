@@ -5,11 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
 }
-
-// Upload-key credentials live in keystore.properties, which is gitignored along with the
-// .jks itself. Losing the keystore only costs an upload-key reset with Google, because
-// Play App Signing holds the real app signing key — but the passwords must still never
-// reach the repository.
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use(::load)
@@ -27,15 +22,13 @@ android {
         applicationId = "com.el.sapiospend"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.00001"
+        versionCode = 5
+        versionName = "1.00003"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        // Only registered when the credentials are actually present, so a fresh clone can
-        // still build debug and run tests without the keystore.
         if (keystorePropsFile.exists()) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
@@ -51,9 +44,6 @@ android {
             optimization {
                 enable = false
             }
-            // Left unsigned rather than debug-signed when the keystore is absent: an
-            // unsigned artifact fails loudly at upload, a debug-signed one is rejected by
-            // Play for a reason that is much harder to read.
             signingConfig = signingConfigs.findByName("release")
         }
     }
@@ -61,9 +51,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    // Puts the exported schemas on the instrumentation test classpath so
-    // MigrationTestHelper can build an old database and validate the migrated one
-    // against the schema Room expects.
     sourceSets.getByName("androidTest") {
         assets.srcDir("$projectDir/schemas")
     }

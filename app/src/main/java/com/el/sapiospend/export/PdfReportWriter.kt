@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.util.formatPeriod
@@ -61,6 +62,18 @@ object PdfReportWriter {
             cursor.keyValue("Total budget", portfolio.totalBudget.formatMoney())
             cursor.keyValue("Total spent", portfolio.totalSpent.formatMoney())
             cursor.keyValue("Remaining", portfolio.totalRemaining.formatMoney())
+            cursor.keyValue("Paid so far", portfolio.totalPaid.formatMoney())
+            if (portfolio.totalOutstanding > 0) {
+                cursor.keyValue(
+                    "Still owed",
+                    portfolio.totalOutstanding.formatMoney(),
+                    valuePaint = if (portfolio.totalOverdue > 0) dangerPaint else bodyBoldPaint
+                )
+            }
+            if (portfolio.totalReceived > 0 || portfolio.totalPledged > 0) {
+                cursor.keyValue("Funding received", portfolio.totalReceived.formatMoney())
+                if (portfolio.totalPledged > 0) cursor.keyValue("Pledged", portfolio.totalPledged.formatMoney())
+            }
             cursor.keyValue("Events", "${portfolio.eventCount} (${portfolio.overBudgetCount} over budget)")
         }
 
@@ -84,6 +97,41 @@ object PdfReportWriter {
                 valuePaint = if (a.isOverBudget) dangerPaint else bodyBoldPaint
             )
             cursor.keyValue("Daily burn rate", a.dailyBurnRate.formatMoney())
+
+            // The committed-versus-paid pair, which is what a client asking "what is
+            // still owed" is actually asking. Left off entirely when everything is
+            // settled — a row of zeroes is noise on a one-page summary.
+            if (a.outstanding > 0) {
+                cursor.keyValue("Paid so far", a.totalPaid.formatMoney())
+                cursor.keyValue(
+                    "Still owed",
+                    a.outstanding.formatMoney(),
+                    valuePaint = if (a.payments.overdueCount > 0) dangerPaint else bodyBoldPaint
+                )
+                if (a.payments.overdueCount > 0) {
+                    cursor.keyValue(
+                        "Overdue",
+                        "${a.payments.overdueAmount.formatMoney()} across ${plural(a.payments.overdueCount, "payment")}",
+                        valuePaint = dangerPaint
+                    )
+                }
+                a.payments.nextDueDate?.let { cursor.keyValue("Next payment due", it.formatDate()) }
+            }
+
+            a.guestCount?.takeIf { it > 0 }?.let { guests ->
+                cursor.keyValue("Guests", "$guests")
+                a.costPerGuest?.let { cursor.keyValue("Cost per guest", it.formatMoney()) }
+            }
+
+            if (a.funding.total > 0) {
+                cursor.keyValue("Funding received", a.funding.received.formatMoney())
+                if (a.funding.pledged > 0) cursor.keyValue("Pledged, not yet in", a.funding.pledged.formatMoney())
+                cursor.keyValue(
+                    "Cash position",
+                    a.cashPosition.formatMoney(),
+                    valuePaint = if (a.cashPosition < 0) dangerPaint else bodyBoldPaint
+                )
+            }
 
             // Period figures only for a dated budget — see EventAnalytics.hasPeriod.
             formatPeriod(a.periodStart, a.periodEnd)?.let { cursor.keyValue("Period", it) }
@@ -117,15 +165,35 @@ object PdfReportWriter {
 
             if (section.expenses.isNotEmpty()) {
                 cursor.text("Expenses", bodyBoldPaint, gapBefore = 16f)
-                cursor.tableRow(listOf("Date", "Item", "Category", "Amount"), labelPaint, gapBefore = 8f)
+                cursor.tableRow(listOf("Date", "Item", "Category", "Amount", "Status"), labelPaint, gapBefore = 8f)
                 cursor.rule(gapBefore = 3f)
                 section.expenses.forEach { expense ->
+                    val overdue = Payments.isOverdue(expense, report.generatedAt)
                     cursor.tableRow(
                         listOf(
                             expense.dateCreated.formatDate(),
                             expense.title,
                             expense.category,
-                            expense.amount.formatMoney()
+                            expense.amount.formatMoney(),
+                            if (overdue) "Overdue" else Payments.statusOf(expense).label
+                        ),
+                        if (overdue) dangerPaint else bodyPaint,
+                        gapBefore = 6f
+                    )
+                }
+            }
+
+            if (section.contributions.isNotEmpty()) {
+                cursor.text("Funding", bodyBoldPaint, gapBefore = 16f)
+                cursor.tableRow(listOf("Date", "From", "Status", "Amount"), labelPaint, gapBefore = 8f)
+                cursor.rule(gapBefore = 3f)
+                section.contributions.forEach { contribution ->
+                    cursor.tableRow(
+                        listOf(
+                            (contribution.receivedAt ?: contribution.dateCreated).formatDate(),
+                            contribution.source,
+                            if (contribution.isReceived) "Received" else "Pledged",
+                            contribution.amount.formatMoney()
                         ),
                         bodyPaint,
                         gapBefore = 6f
@@ -187,7 +255,9 @@ object PdfReportWriter {
             y += gapBefore
             ensureSpace(paint.textSize + 4f)
             y += paint.textSize
-            val columns = floatArrayOf(MARGIN, MARGIN + 200f, MARGIN + 320f, MARGIN + 430f)
+            // Five slots: the expense table gained a status column. A four-cell row —
+            // the category and funding tables — simply stops at the fourth.
+            val columns = floatArrayOf(MARGIN, MARGIN + 150f, MARGIN + 270f, MARGIN + 380f, MARGIN + 460f)
             cells.forEachIndexed { index, cell ->
                 if (index < columns.size) {
                     val maxWidth = if (index + 1 < columns.size) columns[index + 1] - columns[index] - 8f else 100f

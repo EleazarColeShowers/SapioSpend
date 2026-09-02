@@ -6,6 +6,8 @@ import com.el.sapiospend.billing.FreePlanLimits
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.ProFeature
 import com.el.sapiospend.data.local.EventRepository
+import com.el.sapiospend.domain.payment.PaymentStatus
+import com.el.sapiospend.domain.recurring.Recurrence
 import com.el.sapiospend.domain.template.BudgetTemplates
 import com.el.sapiospend.domain.template.CategoryAmount
 import com.el.sapiospend.domain.template.CustomCategoryInput
@@ -24,6 +26,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -48,7 +52,7 @@ class EventViewModelTest {
         Dispatchers.setMain(testDispatcher)
         db = FakeDatabase()
         entitlements = FakeEntitlements(Plan.FREE)
-        val repository = EventRepository(db.eventDao(), db.expenseDao(), db.budgetLineDao())
+        val repository = db.repository()
         viewModel = EventViewModel(repository, entitlements)
     }
 
@@ -337,7 +341,7 @@ class EventViewModelTest {
             override fun canUse(feature: ProFeature): Boolean = false
         }
         val gated = EventViewModel(
-            EventRepository(db.eventDao(), db.expenseDao(), db.budgetLineDao()),
+            db.repository(),
             noProFeatures
         )
         val eventsJob = launch { gated.events.collect {} }
@@ -614,4 +618,163 @@ class EventViewModelTest {
         eventsJob.cancel()
         expensesJob.cancel()
     }
+
+    // --- Payments, funding and recurring rules ----------------------------------
+
+    @Test
+    fun `an expense recorded without a payment answer is filed as paid`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addExpense(eventId, "Catering", "Food", 400_000.0)
+
+        val expense = db.expenses.value.single()
+        assertEquals(400_000.0, expense.amountPaid, 0.01)
+        assertEquals(0.0, expense.outstanding, 0.01)
+    }
+
+    @Test
+    fun `a deposit is stored as the part paid, leaving the rest owing`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addExpense(eventId, "Catering", "Food", 400_000.0, amountPaid = 100_000.0)
+
+        assertEquals(300_000.0, db.expenses.value.single().outstanding, 0.01)
+    }
+
+    @Test
+    fun `a payment recorded larger than the amount is clamped rather than stored`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addExpense(eventId, "Catering", "Food", 400_000.0, amountPaid = 900_000.0)
+
+        assertEquals(400_000.0, db.expenses.value.single().amountPaid, 0.01)
+    }
+
+    @Test
+    fun `marking an expense paid settles it from the list`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+        viewModel.addExpense(eventId, "Catering", "Food", 400_000.0, amountPaid = 0.0)
+
+        viewModel.setPaymentStatus(db.expenses.value.single(), PaymentStatus.PAID)
+
+        assertTrue(db.expenses.value.single().isSettled)
+    }
+
+    @Test
+    fun `a pledge only counts as received once it is marked so`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addContribution(eventId, "Client deposit", 300_000.0, receivedAt = null)
+        assertFalse(db.contributions.value.single().isReceived)
+
+        viewModel.setContributionReceived(db.contributions.value.single(), received = true)
+        assertTrue(db.contributions.value.single().isReceived)
+    }
+
+    @Test
+    fun `deleting an event tombstones its funding and its recurring rules too`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val event = db.events.value.single()
+        viewModel.addContribution(event.id, "Client", 100_000.0)
+        viewModel.addRecurringRule(
+            eventId = event.id,
+            title = "Venue hire",
+            category = "Venue",
+            amount = 50_000.0,
+            recurrence = Recurrence.WEEKLY,
+            startDate = System.currentTimeMillis()
+        )
+
+        viewModel.deleteEvent(event)
+
+        assertNotNull(db.contributions.value.single().deletedAt)
+        assertNotNull("a live rule would keep charging a deleted event", db.recurringRules.value.single().deletedAt)
+    }
+
+    @Test
+    fun `a recurring rule starting today records its first charge immediately`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addRecurringRule(
+            eventId = eventId,
+            title = "Venue hire",
+            category = "Venue",
+            amount = 50_000.0,
+            recurrence = Recurrence.WEEKLY,
+            startDate = System.currentTimeMillis()
+        )
+
+        val charged = db.expenses.value.single()
+        assertEquals("Venue hire", charged.title)
+        // Charged, not paid: the app knows the money is owed, not that anyone has sent it.
+        assertEquals(0.0, charged.amountPaid, 0.01)
+    }
+
+    @Test
+    fun `a rule dated in the future charges nothing yet`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+
+        viewModel.addRecurringRule(
+            eventId = eventId,
+            title = "Venue hire",
+            category = "Venue",
+            amount = 50_000.0,
+            recurrence = Recurrence.WEEKLY,
+            startDate = System.currentTimeMillis() + (7 * 24 * 60 * 60 * 1000L)
+        )
+
+        assertTrue(db.expenses.value.isEmpty())
+    }
+
+    @Test
+    fun `pausing a rule stops it charging and leaves what it already recorded`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+        viewModel.addRecurringRule(
+            eventId = eventId,
+            title = "Venue hire",
+            category = "Venue",
+            amount = 50_000.0,
+            recurrence = Recurrence.WEEKLY,
+            startDate = System.currentTimeMillis()
+        )
+        val chargedOnce = db.expenses.value.size
+
+        viewModel.setRecurringActive(db.recurringRules.value.single(), active = false)
+
+        assertFalse(db.recurringRules.value.single().active)
+        assertEquals(chargedOnce, db.expenses.value.size)
+    }
+
+
+    @Test
+    fun `resuming a paused rule does not immediately bill for the pause`() = runTest {
+        viewModel.addEvent("Wedding", 1_000_000.0)
+        val eventId = db.events.value.single().id
+        viewModel.addRecurringRule(
+            eventId = eventId,
+            title = "Venue hire",
+            category = "Venue",
+            amount = 50_000.0,
+            recurrence = Recurrence.WEEKLY,
+            startDate = System.currentTimeMillis()
+        )
+        viewModel.setRecurringActive(db.recurringRules.value.single(), active = false)
+        val chargedWhilePaused = db.expenses.value.size
+
+        viewModel.setRecurringActive(db.recurringRules.value.single(), active = true)
+
+        val rule = db.recurringRules.value.single()
+        assertTrue(rule.active)
+        assertTrue("the next charge belongs in the future", rule.nextDueDate > System.currentTimeMillis())
+        assertEquals("switching a rule back on is not a bill", chargedWhilePaused, db.expenses.value.size)
+    }
+
 }

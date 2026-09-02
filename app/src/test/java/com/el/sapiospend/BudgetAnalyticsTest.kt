@@ -1,6 +1,7 @@
 package com.el.sapiospend
 
 import com.el.sapiospend.data.local.BudgetLineEntity
+import com.el.sapiospend.data.local.ContributionEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
@@ -24,6 +25,15 @@ class BudgetAnalyticsTest {
     private fun line(eventId: String, category: String, planned: Double) =
         BudgetLineEntity(eventId = eventId, category = category, plannedAmount = planned)
 
+    private fun contribution(eventId: String, amount: Double, received: Boolean, id: String = "c1") =
+        ContributionEntity(
+            id = id,
+            eventId = eventId,
+            source = "Client",
+            amount = amount,
+            receivedAt = if (received) createdAt else null
+        )
+
     @Test
     fun `spend and remaining are computed from the event's own expenses only`() {
         val analytics = BudgetAnalytics.forEvent(
@@ -34,7 +44,7 @@ class BudgetAnalyticsTest {
                 expense("other", "Food", 999_000.0)
             ),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(500_000.0, analytics.totalSpent, 0.01)
@@ -49,7 +59,7 @@ class BudgetAnalyticsTest {
             event(budget = 100_000.0),
             listOf(expense("e1", "Food", 150_000.0)),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertTrue(analytics.isOverBudget)
@@ -62,7 +72,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 100_000.0), expense("e1", "Fireworks", 20_000.0)),
             listOf(line("e1", "Food", 80_000.0), line("e1", "Venue", 200_000.0)),
-            createdAt
+            now = createdAt
         )
 
         val byName = analytics.categories.associateBy { it.category }
@@ -87,7 +97,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 150_000.0), expense("e1", "Decor", 120_000.0)),
             listOf(line("e1", "Food", 100_000.0), line("e1", "Decor", 50_000.0)),
-            createdAt
+            now = createdAt
         )
 
         assertEquals("Decor", analytics.biggestOverrun?.category)
@@ -100,7 +110,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 50_000.0)),
             listOf(line("e1", "Food", 100_000.0)),
-            createdAt
+            now = createdAt
         )
 
         assertNull(analytics.biggestOverrun)
@@ -112,7 +122,7 @@ class BudgetAnalyticsTest {
             event(budget = 1_000_000.0),
             emptyList(),
             listOf(line("e1", "Food", 600_000.0)),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(400_000.0, analytics.unallocated, 0.01)
@@ -124,7 +134,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 400_000.0)),
             emptyList(),
-            createdAt + (3 * day)
+            now = createdAt + (3 * day)
         )
 
         assertEquals(4, analytics.daysTracked)
@@ -137,7 +147,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 50_000.0)),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(1, analytics.daysTracked)
@@ -151,7 +161,7 @@ class BudgetAnalyticsTest {
             event(budget = 0.0),
             listOf(expense("e1", "Food", 10_000.0)),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(0f, analytics.percentUsed, 0.0001f)
@@ -164,7 +174,7 @@ class BudgetAnalyticsTest {
             listOf(event("e1", 1_000_000.0), event("e2", 500_000.0)),
             listOf(expense("e1", "Food", 400_000.0), expense("e2", "Food", 600_000.0)),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(1_500_000.0, portfolio.totalBudget, 0.01)
@@ -180,7 +190,7 @@ class BudgetAnalyticsTest {
             listOf(event("e1"), event("e2")),
             listOf(expense("e1", "Food", 400_000.0), expense("e2", "Food", 100_000.0)),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(1, portfolio.topCategories.size)
@@ -193,7 +203,7 @@ class BudgetAnalyticsTest {
             listOf(event("e1")),
             emptyList(),
             listOf(line("e1", "Venue", 200_000.0)),
-            createdAt
+            now = createdAt
         )
 
         assertTrue(portfolio.topCategories.isEmpty())
@@ -201,7 +211,7 @@ class BudgetAnalyticsTest {
 
     @Test
     fun `empty portfolio reports zeroes rather than failing`() {
-        val portfolio = BudgetAnalytics.portfolio(emptyList(), emptyList(), emptyList(), createdAt)
+        val portfolio = BudgetAnalytics.portfolio(emptyList(), emptyList(), emptyList(), now = createdAt)
 
         assertEquals(0.0, portfolio.totalBudget, 0.01)
         assertEquals(0f, portfolio.percentUsed, 0.0001f)
@@ -229,7 +239,7 @@ class BudgetAnalyticsTest {
             event(),
             listOf(expense("e1", "Food", 100_000.0)),
             emptyList(),
-            createdAt + (3 * day)
+            now = createdAt + (3 * day)
         )
 
         assertFalse(analytics.hasPeriod)
@@ -247,7 +257,7 @@ class BudgetAnalyticsTest {
             monthlyEvent(),
             listOf(expense("e1", "Food", 100_000.0)),
             emptyList(),
-            createdAt + (9 * day)
+            now = createdAt + (9 * day)
         )
 
         assertEquals(30, analytics.periodLengthDays)
@@ -264,7 +274,7 @@ class BudgetAnalyticsTest {
             monthlyEvent(),
             listOf(expense("e1", "Food", 150_000.0)),
             emptyList(),
-            createdAt + (9 * day)
+            now = createdAt + (9 * day)
         )
 
         // Half the money in a third of the month.
@@ -279,7 +289,7 @@ class BudgetAnalyticsTest {
             monthlyEvent(),
             listOf(expense("e1", "Food", 50_000.0)),
             emptyList(),
-            createdAt + (9 * day)
+            now = createdAt + (9 * day)
         )
 
         assertFalse(analytics.isSpendingAheadOfPace)
@@ -294,7 +304,7 @@ class BudgetAnalyticsTest {
             listOf(expense("e1", "Food", 300_000.0)),
             emptyList(),
             // Two months after the budget closed.
-            createdAt + (90 * day)
+            now = createdAt + (90 * day)
         )
 
         assertEquals(30, analytics.daysTracked)
@@ -310,7 +320,7 @@ class BudgetAnalyticsTest {
             monthlyEvent(start = createdAt + (5 * day)),
             emptyList(),
             emptyList(),
-            createdAt
+            now = createdAt
         )
 
         assertEquals(30, analytics.daysRemaining)
@@ -325,7 +335,7 @@ class BudgetAnalyticsTest {
             monthlyEvent(),
             listOf(expense("e1", "Food", 400_000.0)),
             emptyList(),
-            createdAt + (9 * day)
+            now = createdAt + (9 * day)
         )
 
         assertTrue(analytics.safeDailySpend!! < 0)
@@ -338,10 +348,118 @@ class BudgetAnalyticsTest {
             event().copy(endDate = createdAt + (9 * day)),
             emptyList(),
             emptyList(),
-            createdAt + (2 * day)
+            now = createdAt + (2 * day)
         )
 
         assertEquals(10, analytics.periodLengthDays)
         assertEquals(7, analytics.daysRemaining)
     }
+
+    // --- Payments, funding and guests -------------------------------------------
+    // The three things that separate a budget's ceiling from what is actually going on:
+    // what is still owed, what has actually come in, and how many heads it is all for.
+
+    @Test
+    fun `spend counts what is committed while paid counts what has actually gone`() {
+        val analytics = BudgetAnalytics.forEvent(
+            event(),
+            listOf(
+                expense("e1", "Food", 500_000.0).copy(amountPaid = 200_000.0),
+                expense("e1", "Venue", 200_000.0).copy(amountPaid = 200_000.0)
+            ),
+            emptyList(),
+            now = createdAt
+        )
+
+        assertEquals(700_000.0, analytics.totalSpent, 0.01)
+        assertEquals(400_000.0, analytics.totalPaid, 0.01)
+        assertEquals(300_000.0, analytics.outstanding, 0.01)
+        // Remaining stays measured against what is committed. A budget that only counted
+        // money already handed over would call an event affordable right up to the day
+        // every vendor invoices.
+        assertEquals(300_000.0, analytics.remaining, 0.01)
+    }
+
+    @Test
+    fun `cash position is funding received less what has been paid out`() {
+        val analytics = BudgetAnalytics.forEvent(
+            event(),
+            listOf(expense("e1", "Food", 500_000.0).copy(amountPaid = 500_000.0)),
+            emptyList(),
+            listOf(
+                contribution("e1", 300_000.0, received = true),
+                contribution("e1", 400_000.0, received = false, id = "c2")
+            ),
+            now = createdAt
+        )
+
+        assertEquals(300_000.0, analytics.funding.received, 0.01)
+        assertEquals(400_000.0, analytics.funding.pledged, 0.01)
+        assertEquals(-200_000.0, analytics.cashPosition, 0.01)
+    }
+
+    @Test
+    fun `another event's funding does not count towards this one`() {
+        val analytics = BudgetAnalytics.forEvent(
+            event(),
+            emptyList(),
+            emptyList(),
+            listOf(contribution("other", 900_000.0, received = true)),
+            now = createdAt
+        )
+
+        assertEquals(0.0, analytics.funding.received, 0.01)
+    }
+
+    @Test
+    fun `cost per guest divides spend by heads, and is absent when nobody was counted`() {
+        val counted = BudgetAnalytics.forEvent(
+            event(budget = 1_000_000.0).copy(guestCount = 200),
+            listOf(expense("e1", "Food", 400_000.0)),
+            emptyList(),
+            now = createdAt
+        )
+
+        assertEquals(2_000.0, counted.costPerGuest!!, 0.01)
+        assertEquals(5_000.0, counted.budgetPerGuest!!, 0.01)
+
+        val uncounted = BudgetAnalytics.forEvent(
+            event(),
+            listOf(expense("e1", "Food", 400_000.0)),
+            emptyList(),
+            now = createdAt
+        )
+        assertNull(uncounted.costPerGuest)
+    }
+
+    @Test
+    fun `a guest count of zero does not divide by it`() {
+        val analytics = BudgetAnalytics.forEvent(
+            event().copy(guestCount = 0),
+            listOf(expense("e1", "Food", 400_000.0)),
+            emptyList(),
+            now = createdAt
+        )
+
+        assertNull(analytics.costPerGuest)
+    }
+
+    @Test
+    fun `portfolio totals carry the payment and funding picture across events`() {
+        val portfolio = BudgetAnalytics.portfolio(
+            listOf(event("e1"), event("e2")),
+            listOf(
+                expense("e1", "Food", 500_000.0).copy(amountPaid = 100_000.0),
+                expense("e2", "Food", 300_000.0).copy(amountPaid = 300_000.0)
+            ),
+            emptyList(),
+            listOf(contribution("e1", 250_000.0, received = true)),
+            now = createdAt
+        )
+
+        assertEquals(400_000.0, portfolio.totalPaid, 0.01)
+        assertEquals(400_000.0, portfolio.totalOutstanding, 0.01)
+        assertEquals(250_000.0, portfolio.totalReceived, 0.01)
+    }
+
 }

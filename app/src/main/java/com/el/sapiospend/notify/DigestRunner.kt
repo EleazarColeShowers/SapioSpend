@@ -6,6 +6,7 @@ import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
 import com.el.sapiospend.domain.notify.DailyDigest
 import com.el.sapiospend.settings.SettingsRepository
+import com.el.sapiospend.widget.BudgetWidget
 import kotlinx.coroutines.flow.first
 
 /**
@@ -31,7 +32,19 @@ class DigestRunner(private val context: Context) {
         if (!notifier.canPost()) return
 
         val db = AppDatabase.getDatabase(context)
-        val repository = EventRepository(db.eventDao(), db.expenseDao(), db.budgetLineDao())
+        val repository = EventRepository(
+            db.eventDao(),
+            db.expenseDao(),
+            db.budgetLineDao(),
+            db.contributionDao(),
+            db.recurringExpenseDao()
+        )
+
+        // Recurring charges are applied before the numbers are read, so a reminder about
+        // a budget with rent due today is a reminder about a budget that includes the
+        // rent. This is also the path that keeps rules current for a user who has not
+        // opened the app in weeks.
+        runCatching { repository.materializeRecurring(now) }
 
         // first() on each flow: a one-shot read of the current rows. Collecting would
         // never return, and this runs inside a broadcast the system expects to end.
@@ -39,6 +52,7 @@ class DigestRunner(private val context: Context) {
             events = repository.events.first(),
             expenses = repository.allExpenses.first(),
             budgetLines = repository.allBudgetLines.first(),
+            contributions = repository.allContributions.first(),
             now = now
         )
 
@@ -47,6 +61,10 @@ class DigestRunner(private val context: Context) {
         digest.reminders.forEach(notifier::notifyReminder)
         digest.alerts.forEach(notifier::notifyBudgetAlert)
         digest.checkIn?.let(notifier::notifyCheckIn)
+
+        // The tick has just charged whatever recurring rules came due, so the widget is
+        // showing yesterday's figures until it is told otherwise.
+        BudgetWidget.refresh(context)
 
         // Written even when nothing was posted, because the evaluation also *clears*
         // crossings that no longer hold — that is what lets an alert fire again after

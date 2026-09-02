@@ -1,8 +1,13 @@
 package com.el.sapiospend.domain.analytics
 
 import com.el.sapiospend.data.local.BudgetLineEntity
+import com.el.sapiospend.data.local.ContributionEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
+import com.el.sapiospend.domain.funding.Funding
+import com.el.sapiospend.domain.funding.FundingSummary
+import com.el.sapiospend.domain.payment.PaymentSummary
+import com.el.sapiospend.domain.payment.Payments
 import kotlin.math.max
 
 /** One category of one event: what was planned, what was actually spent, and the gap. */
@@ -37,9 +42,39 @@ data class EventAnalytics(
     /** Total days the period covers, or null when the budget is open-ended. */
     val periodLengthDays: Int? = null,
     /** Whole days left after today. 0 on the last day and after the period closes. */
-    val daysRemaining: Int? = null
+    val daysRemaining: Int? = null,
+    /** Committed against paid for this event's expenses. */
+    val payments: PaymentSummary = Payments.EMPTY,
+    /** Money promised and received towards the event. */
+    val funding: FundingSummary = Funding.EMPTY,
+    /** Heads to divide by, or null when the event has no guest count. */
+    val guestCount: Int? = null
 ) {
     val remaining: Double get() = budget - totalSpent
+
+    /** What has actually left the account, as against what has been committed. */
+    val totalPaid: Double get() = payments.paid
+
+    /** Bills booked and not yet settled — the money still to go out. */
+    val outstanding: Double get() = payments.outstanding
+
+    /**
+     * Cash received less cash paid out.
+     *
+     * The figure that decides whether the next vendor can be paid this week, which
+     * neither the budget nor the spend total can answer on its own: an event can be
+     * comfortably under budget and still have nothing in the account.
+     */
+    val cashPosition: Double get() = funding.cashPosition(payments.paid)
+
+    /** Spend per head, or null when nobody has been counted. */
+    val costPerGuest: Double? get() = guestCount?.takeIf { it > 0 }?.let { totalSpent / it }
+
+    /** What the plan works out to per head — the figure to negotiate a caterer against. */
+    val plannedPerGuest: Double? get() = guestCount?.takeIf { it > 0 }?.let { totalPlanned / it }
+
+    /** The whole budget per head, whether or not it has been spent or planned yet. */
+    val budgetPerGuest: Double? get() = guestCount?.takeIf { it > 0 }?.let { budget / it }
     val isOverBudget: Boolean get() = totalSpent > budget
     val percentUsed: Float
         get() = if (budget > 0) (totalSpent / budget).toFloat() else 0f
@@ -89,6 +124,12 @@ data class PortfolioAnalytics(
     val totalBudget: Double get() = events.sumOf { it.budget }
     val totalSpent: Double get() = events.sumOf { it.totalSpent }
     val totalRemaining: Double get() = totalBudget - totalSpent
+    val totalPaid: Double get() = events.sumOf { it.totalPaid }
+    val totalOutstanding: Double get() = events.sumOf { it.outstanding }
+    val totalOverdue: Double get() = events.sumOf { it.payments.overdueAmount }
+    val overdueCount: Int get() = events.sumOf { it.payments.overdueCount }
+    val totalReceived: Double get() = events.sumOf { it.funding.received }
+    val totalPledged: Double get() = events.sumOf { it.funding.pledged }
     val eventCount: Int get() = events.size
     val overBudgetCount: Int get() = events.count { it.isOverBudget }
     val percentUsed: Float
@@ -107,6 +148,7 @@ object BudgetAnalytics {
         event: EventEntity,
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
+        contributions: List<ContributionEntity> = emptyList(),
         now: Long = System.currentTimeMillis()
     ): EventAnalytics {
         val eventExpenses = expenses.filter { it.eventId == event.id }
@@ -160,7 +202,10 @@ object BudgetAnalytics {
             periodStart = event.startDate,
             periodEnd = event.endDate,
             periodLengthDays = periodLengthDays,
-            daysRemaining = daysRemaining
+            daysRemaining = daysRemaining,
+            payments = Payments.summarize(eventExpenses, now),
+            funding = Funding.summarize(contributions.filter { it.eventId == event.id }),
+            guestCount = event.guestCount
         )
     }
 
@@ -172,9 +217,10 @@ object BudgetAnalytics {
         events: List<EventEntity>,
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
+        contributions: List<ContributionEntity> = emptyList(),
         now: Long = System.currentTimeMillis()
     ): PortfolioAnalytics {
-        val perEvent = events.map { forEvent(it, expenses, budgetLines, now) }
+        val perEvent = events.map { forEvent(it, expenses, budgetLines, contributions, now) }
 
         val topCategories = perEvent
             .flatMap { it.categories }
@@ -191,4 +237,5 @@ object BudgetAnalytics {
 
         return PortfolioAnalytics(events = perEvent, topCategories = topCategories)
     }
+
 }

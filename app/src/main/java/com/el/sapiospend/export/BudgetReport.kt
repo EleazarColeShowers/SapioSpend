@@ -1,6 +1,7 @@
 package com.el.sapiospend.export
 
 import com.el.sapiospend.data.local.BudgetLineEntity
+import com.el.sapiospend.data.local.ContributionEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
@@ -26,7 +27,9 @@ data class BudgetReport(
 
 data class EventReportSection(
     val analytics: EventAnalytics,
-    val expenses: List<ExpenseEntity>
+    val expenses: List<ExpenseEntity>,
+    /** Money in, so an exported report can be handed to whoever is funding the event. */
+    val contributions: List<ContributionEntity> = emptyList()
 )
 
 object ReportBuilder {
@@ -35,16 +38,18 @@ object ReportBuilder {
         event: EventEntity,
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
+        contributions: List<ContributionEntity> = emptyList(),
         now: Long = System.currentTimeMillis()
     ): BudgetReport {
-        val analytics = BudgetAnalytics.forEvent(event, expenses, budgetLines, now)
+        val analytics = BudgetAnalytics.forEvent(event, expenses, budgetLines, contributions, now)
         return BudgetReport(
             title = event.name,
             generatedAt = now,
             sections = listOf(
                 EventReportSection(
                     analytics = analytics,
-                    expenses = expenses.filter { it.eventId == event.id }.sortedByDescending { it.dateCreated }
+                    expenses = expenses.filter { it.eventId == event.id }.sortedByDescending { it.dateCreated },
+                    contributions = contributions.filter { it.eventId == event.id }.sortedByDescending { it.dateCreated }
                 )
             ),
             portfolio = null
@@ -55,16 +60,18 @@ object ReportBuilder {
         events: List<EventEntity>,
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
+        contributions: List<ContributionEntity> = emptyList(),
         now: Long = System.currentTimeMillis()
     ): BudgetReport {
-        val portfolio = BudgetAnalytics.portfolio(events, expenses, budgetLines, now)
+        val portfolio = BudgetAnalytics.portfolio(events, expenses, budgetLines, contributions, now)
         return BudgetReport(
             title = "All Events",
             generatedAt = now,
             sections = portfolio.events.map { analytics ->
                 EventReportSection(
                     analytics = analytics,
-                    expenses = expenses.filter { it.eventId == analytics.eventId }.sortedByDescending { it.dateCreated }
+                    expenses = expenses.filter { it.eventId == analytics.eventId }.sortedByDescending { it.dateCreated },
+                    contributions = contributions.filter { it.eventId == analytics.eventId }.sortedByDescending { it.dateCreated }
                 )
             },
             portfolio = portfolio

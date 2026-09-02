@@ -30,6 +30,74 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * 5 -> 6: the money-owed and money-in half of the app.
+ *
+ * expenses gain a vendor, the amount actually handed over, a due date and a receipt
+ * path; events gain a guest count; and two tables arrive — contributions (funding
+ * promised and received) and recurring_expenses (a cost that comes back).
+ *
+ * The one line that matters is the amountPaid back-fill. Every expense recorded before
+ * this version was a record of money already gone, so leaving them at the column default
+ * of zero would open the app on a screen claiming the user owes their entire spending
+ * history. They are settled by definition, and are marked so.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `events` ADD COLUMN `guestCount` INTEGER")
+
+        db.execSQL("ALTER TABLE `expenses` ADD COLUMN `vendor` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `expenses` ADD COLUMN `amountPaid` REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE `expenses` ADD COLUMN `dueDate` INTEGER")
+        db.execSQL("ALTER TABLE `expenses` ADD COLUMN `receiptPath` TEXT")
+        db.execSQL("UPDATE `expenses` SET `amountPaid` = `amount`")
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `contributions` (
+                `id` TEXT NOT NULL,
+                `eventId` TEXT NOT NULL,
+                `source` TEXT NOT NULL,
+                `amount` REAL NOT NULL,
+                `receivedAt` INTEGER,
+                `notes` TEXT NOT NULL,
+                `dateCreated` INTEGER NOT NULL,
+                `ownerId` TEXT NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                `deletedAt` INTEGER,
+                PRIMARY KEY(`id`),
+                FOREIGN KEY(`eventId`) REFERENCES `events`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_contributions_eventId` ON `contributions` (`eventId`)")
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `recurring_expenses` (
+                `id` TEXT NOT NULL,
+                `eventId` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `category` TEXT NOT NULL,
+                `vendor` TEXT NOT NULL,
+                `amount` REAL NOT NULL,
+                `frequency` TEXT NOT NULL,
+                `nextDueDate` INTEGER NOT NULL,
+                `until` INTEGER,
+                `active` INTEGER NOT NULL,
+                `dateCreated` INTEGER NOT NULL,
+                `ownerId` TEXT NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                `deletedAt` INTEGER,
+                PRIMARY KEY(`id`),
+                FOREIGN KEY(`eventId`) REFERENCES `events`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_expenses_eventId` ON `recurring_expenses` (`eventId`)")
+    }
+}
+
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("PRAGMA defer_foreign_keys = TRUE")

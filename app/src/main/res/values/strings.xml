@@ -2,4 +2,8 @@
     <string name="app_name">Sapio Spend</string>
     <string name="update_ready_message">An update is ready to install</string>
     <string name="update_ready_action">Restart</string>
+    <string name="widget_label">LEFT TO SPEND</string>
+    <string name="widget_add_expense">+ Log an expense</string>
+    <string name="widget_description">Budget left across your events, and a shortcut to log a spend.</string>
+    <string name="widget_empty">No events yet</string>
 </resources>

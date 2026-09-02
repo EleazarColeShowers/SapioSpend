@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for API 30 and below. Everything not excluded here is backed up, which is
+  what should happen to the database: losing a phone should not lose a planner's budgets.
+
+  Receipt photos are excluded on purpose. Auto Backup gives an app a 25MB quota and
+  silently stops backing it up once that is exceeded, so a wedding's worth of receipt
+  images would quietly take the expense history down with it. A restored install shows
+  the rows with their photos missing, which the UI already draws for.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="receipts/" />
 </full-backup-content>

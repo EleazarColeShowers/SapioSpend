@@ -13,9 +13,9 @@ object ExpenseSearch {
     /**
      * Expenses matching [query], in the order they were given.
      *
-     * Title, category and notes are searched together rather than behind a field picker:
-     * somebody hunting for a payment remembers "Chidi" or "deposit", not which of the
-     * three fields they typed it into.
+     * Title, category, vendor and notes are searched together rather than behind a field
+     * picker: somebody hunting for a payment remembers "Chidi" or "deposit", not which of
+     * the four fields they typed it into.
      *
      * Order is preserved rather than ranked by relevance. The list arrives newest-first
      * and that is the ordering the user is reading it in — re-sorting matches by how well
@@ -27,11 +27,19 @@ object ExpenseSearch {
     fun filter(expenses: List<ExpenseEntity>, query: String): List<ExpenseEntity> {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return expenses
-        return expenses.filter { it.matches(trimmed) }
+        return expenses.filter { matches(it, trimmed) }
     }
 
-    private fun ExpenseEntity.matches(query: String): Boolean =
-        title.contains(query, ignoreCase = true) ||
-            category.contains(query, ignoreCase = true) ||
-            notes.contains(query, ignoreCase = true)
+    /**
+     * Whether one expense answers [query].
+     *
+     * Public so the global search can apply the same rules rather than restating them —
+     * two searches that disagree about what "Chidi" matches is a bug nobody would report,
+     * they would just stop trusting the search.
+     */
+    fun matches(expense: ExpenseEntity, query: String): Boolean =
+        expense.title.contains(query, ignoreCase = true) ||
+            expense.category.contains(query, ignoreCase = true) ||
+            expense.vendor.contains(query, ignoreCase = true) ||
+            expense.notes.contains(query, ignoreCase = true)
 }

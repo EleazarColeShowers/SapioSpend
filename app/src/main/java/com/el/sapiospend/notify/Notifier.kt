@@ -96,7 +96,11 @@ class Notifier(private val context: Context) {
             channel = NotificationChannels.REMINDERS,
             title = title,
             text = text,
-            eventId = reminder.eventId
+            eventId = reminder.eventId,
+            // A reminder that a period is closing is exactly when somebody has spending
+            // to write down, so the action is offered rather than making them find the
+            // event, then the button, then the form.
+            quickAdd = true
         )
     }
 
@@ -114,7 +118,9 @@ class Notifier(private val context: Context) {
             channel = NotificationChannels.CHECK_IN,
             title = title,
             text = text,
-            eventId = null
+            eventId = null,
+            // The check-in ends with "Anything to log?" — the action is the answer.
+            quickAdd = true
         )
     }
 
@@ -122,10 +128,17 @@ class Notifier(private val context: Context) {
     // the notify() below is wrapped besides. Suppressed rather than restructured: moving
     // the check inline would mean repeating it at every call site.
     @SuppressLint("MissingPermission")
-    private fun post(id: Int, channel: String, title: String, text: String, eventId: String?) {
+    private fun post(
+        id: Int,
+        channel: String,
+        title: String,
+        text: String,
+        eventId: String?,
+        quickAdd: Boolean = false
+    ) {
         if (!canPost()) return
 
-        val notification = NotificationCompat.Builder(context, channel)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentTitle(title)
             .setContentText(text)
@@ -134,7 +147,19 @@ class Notifier(private val context: Context) {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(openAppIntent(id, eventId))
             .setAutoCancel(true)
-            .build()
+
+        if (quickAdd) {
+            // The action's request code is offset from the notification's own so the two
+            // pending intents stay distinct — sharing one would make tapping the body do
+            // whatever the button does.
+            builder.addAction(
+                R.drawable.ic_stat_notify,
+                "Log an expense",
+                openAppIntent(id + QUICK_ADD_REQUEST_OFFSET, eventId, quickAdd = true)
+            )
+        }
+
+        val notification = builder.build()
 
         // Permission is re-checked inside notify() by the compat layer, but the platform
         // still throws if it disappears between the check above and here — a user
@@ -150,10 +175,11 @@ class Notifier(private val context: Context) {
      * The request code is the notification id so two live notifications cannot share —
      * and therefore overwrite — each other's pending intent extras.
      */
-    private fun openAppIntent(requestCode: Int, eventId: String?): PendingIntent {
+    private fun openAppIntent(requestCode: Int, eventId: String?, quickAdd: Boolean = false): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             eventId?.let { putExtra(MainActivity.EXTRA_EVENT_ID, it) }
+            if (quickAdd) putExtra(MainActivity.EXTRA_QUICK_ADD, true)
         }
         return PendingIntent.getActivity(
             context,
@@ -171,6 +197,9 @@ class Notifier(private val context: Context) {
         private const val ALERT_BASE = 1
         private const val REMINDER_BASE = 2
         private const val EVENT_ID_BITS = 20
+
+        /** Keeps an action's pending intent from colliding with its notification's own. */
+        private const val QUICK_ADD_REQUEST_OFFSET = 1 shl 24
 
         // Not const: a shift is not a compile-time constant expression in Kotlin.
         private val CHECK_IN_ID = 3 shl EVENT_ID_BITS

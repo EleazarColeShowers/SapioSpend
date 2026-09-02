@@ -13,7 +13,8 @@ import java.util.Locale
 
 enum class ExportFormat(val extension: String, val mimeType: String, val label: String) {
     PDF("pdf", "application/pdf", "PDF"),
-    EXCEL("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Excel")
+    EXCEL("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Excel"),
+    CSV("csv", "text/csv", "CSV")
 }
 
 /**
@@ -34,6 +35,7 @@ class ExportManager(private val context: Context) {
             when (format) {
                 ExportFormat.PDF -> PdfReportWriter.write(report, stream)
                 ExportFormat.EXCEL -> XlsxReportWriter.write(report, stream)
+                ExportFormat.CSV -> CsvReportWriter.write(report, stream)
             }
         }
 

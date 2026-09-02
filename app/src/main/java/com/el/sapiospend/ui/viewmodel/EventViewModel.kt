@@ -10,10 +10,16 @@ import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
 import com.el.sapiospend.billing.ProFeature
 import com.el.sapiospend.data.local.BudgetLineEntity
+import com.el.sapiospend.data.local.ContributionEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.data.local.ExpenseEntity
+import com.el.sapiospend.data.local.RecurringExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
+import com.el.sapiospend.domain.payment.PaymentStatus
+import com.el.sapiospend.domain.payment.Payments
+import com.el.sapiospend.domain.recurring.Recurrence
+import com.el.sapiospend.domain.recurring.RecurringExpenses
 import com.el.sapiospend.domain.notify.BudgetAlertPublisher
 import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.BudgetTemplate
@@ -55,6 +61,14 @@ class EventViewModel(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val contributions = repository.allContributions.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val recurringRules = repository.allRecurringRules.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
     val plan: StateFlow<Plan> = entitlements.plan
 
     /** Drives the "1 event left" hint on Home. Enforcement uses a fresh count, not this. */
@@ -75,9 +89,17 @@ class EventViewModel(
      */
     init {
         viewModelScope.launch {
-            combine(events, allExpenses, budgetLines) { events, expenses, lines ->
-                BudgetAnalytics.portfolio(events, expenses, lines).events
+            combine(events, allExpenses, budgetLines, contributions) { events, expenses, lines, funding ->
+                BudgetAnalytics.portfolio(events, expenses, lines, funding).events
             }.collect(alerts::publish)
+        }
+
+        // Rules that came due while the app was closed are charged on the way in, so the
+        // first screen the user sees is already current. The daily tick does the same
+        // when the app is not opened at all; both go through the repository, which
+        // advances each rule's due date in the same transaction and so cannot double up.
+        viewModelScope.launch {
+            runCatching { repository.materializeRecurring() }
         }
     }
 
@@ -104,7 +126,8 @@ class EventViewModel(
         template: BudgetTemplate? = null,
         customLines: List<CategoryAmount> = emptyList(),
         startDate: Long? = null,
-        endDate: Long? = null
+        endDate: Long? = null,
+        guestCount: Int? = null
     ) {
         viewModelScope.launch {
             if (!entitlements.canCreateEvent(repository.activeEventCount())) {
@@ -118,6 +141,7 @@ class EventViewModel(
                 name = name,
                 budget = budget,
                 eventType = eventType,
+                guestCount = guestCount,
                 startDate = start,
                 endDate = end
             )
@@ -213,7 +237,16 @@ class EventViewModel(
         category: String,
         amount: Double,
         notes: String = "",
-        date: Long = System.currentTimeMillis()
+        date: Long = System.currentTimeMillis(),
+        vendor: String = "",
+        /**
+         * Null means "settled" — the caller did not ask the question, and every path that
+         * does not (the widget, a notification quick-add) is recording money that has
+         * already gone. Defaulting the other way would file every quick entry as a debt.
+         */
+        amountPaid: Double? = null,
+        dueDate: Long? = null,
+        receiptPath: String? = null
     ) {
         viewModelScope.launch {
             runCatching {
@@ -224,15 +257,146 @@ class EventViewModel(
                         category = category,
                         amount = amount,
                         notes = notes,
-                        dateCreated = date
+                        dateCreated = date,
+                        vendor = vendor,
+                        amountPaid = (amountPaid ?: amount).coerceIn(0.0, amount),
+                        dueDate = dueDate,
+                        receiptPath = receiptPath
                     )
                 )
             }.onFailure { _message.value = UiMessage.Error("Could not save the expense: ${it.message}") }
         }
     }
 
+    /**
+     * Moves one expense between payment states from the list, without opening the form.
+     *
+     * Marking a vendor paid is the single most repeated action in the app once bookings
+     * start settling, and routing it through the whole edit screen would make it four
+     * taps and a save. A deposit still needs the form, because only the user knows how
+     * much of it was handed over.
+     */
+    fun setPaymentStatus(expense: ExpenseEntity, status: PaymentStatus) {
+        viewModelScope.launch {
+            runCatching { repository.updateExpense(Payments.applyStatus(expense, status)) }
+                .onFailure { _message.value = UiMessage.Error("Could not update the payment: ${it.message}") }
+        }
+    }
+
     fun deleteExpense(expense: ExpenseEntity) {
         viewModelScope.launch { repository.deleteExpense(expense) }
+    }
+
+    // --- Funding --------------------------------------------------------------------
+
+    /**
+     * Records money coming in. [receivedAt] null means it has only been promised, which
+     * is the distinction the whole funding feature turns on.
+     */
+    fun addContribution(
+        eventId: String,
+        source: String,
+        amount: Double,
+        receivedAt: Long? = System.currentTimeMillis(),
+        notes: String = ""
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                repository.addContribution(
+                    ContributionEntity(
+                        eventId = eventId,
+                        source = source,
+                        amount = amount,
+                        receivedAt = receivedAt,
+                        notes = notes
+                    )
+                )
+            }.onFailure { _message.value = UiMessage.Error("Could not save the contribution: ${it.message}") }
+        }
+    }
+
+    /** Flips a pledge to received, or back — the correction path for a tap on the wrong row. */
+    fun setContributionReceived(contribution: ContributionEntity, received: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                repository.updateContribution(
+                    contribution.copy(
+                        receivedAt = if (received) contribution.receivedAt ?: System.currentTimeMillis() else null
+                    )
+                )
+            }.onFailure { _message.value = UiMessage.Error("Could not update the contribution: ${it.message}") }
+        }
+    }
+
+    fun deleteContribution(contribution: ContributionEntity) {
+        viewModelScope.launch { repository.deleteContribution(contribution) }
+    }
+
+    // --- Recurring expenses ---------------------------------------------------------
+
+    /**
+     * Sets up a cost that comes back.
+     *
+     * The first charge is placed by [RecurringExpenses.firstDueDate] rather than taken
+     * from [startDate] directly: a rule added today for a payment that went out last week
+     * must not immediately invent that payment. It is then materialised straight away, so
+     * a rule starting today produces its first expense while the user is still looking at
+     * the screen instead of appearing tomorrow morning.
+     */
+    fun addRecurringRule(
+        eventId: String,
+        title: String,
+        category: String,
+        amount: Double,
+        recurrence: Recurrence,
+        startDate: Long,
+        vendor: String = "",
+        until: Long? = null
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                repository.addRecurringRule(
+                    RecurringExpenseEntity(
+                        eventId = eventId,
+                        title = title,
+                        category = category,
+                        vendor = vendor,
+                        amount = amount,
+                        frequency = recurrence.name,
+                        nextDueDate = RecurringExpenses.firstDueDate(recurrence, startDate),
+                        until = until
+                    )
+                )
+                repository.materializeRecurring()
+            }.onFailure { _message.value = UiMessage.Error("Could not save the recurring expense: ${it.message}") }
+        }
+    }
+
+    /** Pauses or resumes a rule. A paused rule stops charging but stays on screen. */
+    fun setRecurringActive(rule: RecurringExpenseEntity, active: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                // Resuming moves the rule to its next *future* occurrence rather than
+                // catching up. A rule paused for six weeks must not wake up owing six
+                // weeks of back charges, and switching one back on should not put an
+                // expense on the screen the same second — the user asked for it to run
+                // again, not for it to bill them now.
+                val resumed =
+                    if (active) rule.copy(
+                        active = true,
+                        nextDueDate = RecurringExpenses.firstDueDate(
+                            Recurrence.fromName(rule.frequency),
+                            rule.nextDueDate
+                        )
+                    )
+                    else rule.copy(active = false)
+                repository.updateRecurringRule(resumed)
+            }.onFailure { _message.value = UiMessage.Error("Could not update the recurring expense: ${it.message}") }
+        }
+    }
+
+    fun deleteRecurringRule(rule: RecurringExpenseEntity) {
+        viewModelScope.launch { repository.deleteRecurringRule(rule) }
     }
 
     /** Applied by the paywall today; by the billing client once purchases are live. */

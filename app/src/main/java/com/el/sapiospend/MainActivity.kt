@@ -41,6 +41,7 @@ import com.el.sapiospend.settings.SettingsRepository
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.update.InAppUpdater
+import com.el.sapiospend.widget.BudgetWidget
 import com.el.sapiospend.update.UpdateStatus
 import kotlinx.coroutines.launch
 
@@ -48,7 +49,13 @@ class MainActivity : ComponentActivity() {
 
     private val eventViewModel: EventViewModel by viewModels {
         val db = AppDatabase.getDatabase(applicationContext)
-        val repository = EventRepository(db.eventDao(), db.expenseDao(), db.budgetLineDao())
+        val repository = EventRepository(
+            db.eventDao(),
+            db.expenseDao(),
+            db.budgetLineDao(),
+            db.contributionDao(),
+            db.recurringExpenseDao()
+        )
         EventViewModel.factory(
             repository,
             LocalEntitlements.create(applicationContext),
@@ -84,6 +91,12 @@ class MainActivity : ComponentActivity() {
     private var pendingEventId by mutableStateOf<String?>(null)
 
     /**
+     * Whether this launch came from the widget's or a notification's "log an expense"
+     * action, in which case the app opens on the form rather than on Home.
+     */
+    private var pendingQuickAdd by mutableStateOf(false)
+
+    /**
      * Whether a notification would currently be delivered, for Settings to explain itself
      * with. Kept as state here rather than read inside the screen because it changes
      * outside composition — in the system dialog, and in the settings app — and a value
@@ -110,6 +123,7 @@ class MainActivity : ComponentActivity() {
         // that already exists is a no-op, so every launch is the simplest correct place.
         NotificationChannels.ensure(applicationContext)
         pendingEventId = intent?.getStringExtra(EXTRA_EVENT_ID)
+        pendingQuickAdd = intent?.getBooleanExtra(EXTRA_QUICK_ADD, false) == true
 
         lifecycleScope.launch { ExportManager(applicationContext).clearCache() }
 
@@ -159,6 +173,8 @@ class MainActivity : ComponentActivity() {
                     settingsRepository = settingsRepository,
                     openEventId = pendingEventId,
                     onEventOpened = { pendingEventId = null },
+                    quickAdd = pendingQuickAdd,
+                    onQuickAddHandled = { pendingQuickAdd = false },
                     notificationsAllowed = notificationsAllowed,
                     onRequestNotificationPermission = ::requestNotificationPermission
                 )
@@ -182,6 +198,19 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intent.getStringExtra(EXTRA_EVENT_ID)?.let { pendingEventId = it }
+        if (intent.getBooleanExtra(EXTRA_QUICK_ADD, false)) pendingQuickAdd = true
+    }
+
+    /**
+     * The widget is redrawn on the way out rather than from a collector on the data.
+     *
+     * Every write the user makes is followed, eventually, by them leaving the screen, so
+     * this catches all of them in one broadcast — where a collector would fire a
+     * launcher-wide update for every keystroke in an amount field.
+     */
+    override fun onPause() {
+        super.onPause()
+        BudgetWidget.refresh(applicationContext)
     }
 
     /**
@@ -212,5 +241,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Set by [com.el.sapiospend.notify.Notifier] so a tap lands on the right event. */
         const val EXTRA_EVENT_ID = "com.el.sapiospend.extra.EVENT_ID"
+
+        /**
+         * Set by the widget and by a notification action to open straight on the expense
+         * form. Pairs with [EXTRA_EVENT_ID] when the caller knows which event; without it
+         * the form opens on the most recent one.
+         */
+        const val EXTRA_QUICK_ADD = "com.el.sapiospend.extra.QUICK_ADD"
     }
 }

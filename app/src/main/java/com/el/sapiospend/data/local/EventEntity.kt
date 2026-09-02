@@ -14,6 +14,10 @@ import java.util.UUID
  * deletedAt makes deletes soft. A hard delete is indistinguishable from "never existed"
  * when two devices reconcile, so rows are tombstoned and filtered out of every query.
  *
+ * guestCount is nullable rather than zero-defaulted for the same reason the dates are:
+ * "nobody counted" and "an event for nobody" are different facts, and cost per head is
+ * only worth showing for the first of the two when it has actually been answered.
+ *
  * startDate/endDate bound the budget in time. Both are null for the open-ended events
  * the app shipped with, which is why they are nullable rather than defaulted to the
  * creation date — "no period" and "a period that happens to start today" produce very
@@ -25,6 +29,8 @@ data class EventEntity(
     val name: String,
     val budget: Double,
     val eventType: String = "General",
+    /** Heads to divide the spend by, or null when the user has not said. */
+    val guestCount: Int? = null,
     val dateCreated: Long = System.currentTimeMillis(),
     val startDate: Long? = null,
     val endDate: Long? = null,
@@ -34,6 +40,9 @@ data class EventEntity(
 ) {
     /** True once the budget is bounded at both ends — the case pacing maths needs. */
     val hasPeriod: Boolean get() = startDate != null && endDate != null
+
+    /** Only a positive count divides; zero would make every per-head figure infinite. */
+    val hasGuestCount: Boolean get() = (guestCount ?: 0) > 0
 }
 
 /** Stand-in owner for the single local user, replaced by a real account id later. */

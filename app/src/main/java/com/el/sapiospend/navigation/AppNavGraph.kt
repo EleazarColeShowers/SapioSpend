@@ -41,6 +41,12 @@ fun AppNavGraph(
     /** Event a tapped notification wants opened, or null on an ordinary launch. */
     openEventId: String? = null,
     onEventOpened: () -> Unit = {},
+    /**
+     * Set when the app was launched by the widget's or a notification's "log an expense"
+     * action, so the user lands on the form rather than on the screen it was tapped from.
+     */
+    quickAdd: Boolean = false,
+    onQuickAddHandled: () -> Unit = {},
     notificationsAllowed: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {}
 ) {
@@ -60,6 +66,28 @@ fun AppNavGraph(
         openEventId?.let {
             navController.navigate(Routes.EventDetail.createRoute(it))
             onEventOpened()
+        }
+    }
+
+    /**
+     * Quick-add lands straight on the expense form for the event it was fired against —
+     * or, when it names no event, the most recent one, which is the budget somebody
+     * logging a spend on the way out of a shop is almost certainly logging against.
+     *
+     * With no events at all there is nothing to record against, so it falls through to
+     * Home rather than opening a form bound to an event id that does not exist.
+     */
+    val events by eventViewModel.events.collectAsState()
+    LaunchedEffect(quickAdd, events) {
+        if (!quickAdd) return@LaunchedEffect
+        val target = openEventId ?: events.firstOrNull()?.id
+        if (events.isEmpty()) {
+            onQuickAddHandled()
+            return@LaunchedEffect
+        }
+        target?.let {
+            navController.navigate(Routes.AddExpense.createRoute(it))
+            onQuickAddHandled()
         }
     }
 
@@ -95,6 +123,7 @@ fun AppNavGraph(
             HomeScreen(
                 onAddEventClick = { navController.navigate(Routes.AddEvent.route) },
                 onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
+                onExpenseClick = { expenseId -> navController.navigate(Routes.EditExpense.createRoute(expenseId)) },
                 onAnalyticsClick = {
                     if (proUnlocked) navController.navigate(Routes.Analytics.route)
                     else paywallTrigger = PaywallTrigger.ANALYTICS
@@ -111,8 +140,17 @@ fun AppNavGraph(
                 proUnlocked = proUnlocked,
                 onBack = { navController.popBackStack() },
                 onRequirePro = { paywallTrigger = PaywallTrigger.TEMPLATES },
-                onSaveEvent = { name, budget, eventType, template, customLines, startDate, endDate ->
-                    eventViewModel.addEvent(name, budget, eventType, template, customLines, startDate, endDate)
+                onSaveEvent = { input ->
+                    eventViewModel.addEvent(
+                        name = input.name,
+                        budget = input.budget,
+                        eventType = input.eventType,
+                        template = input.template,
+                        customLines = input.customLines,
+                        startDate = input.startDate,
+                        endDate = input.endDate,
+                        guestCount = input.guestCount
+                    )
                     navController.popBackStack()
                 }
             )
@@ -179,8 +217,19 @@ fun AppNavGraph(
                 eventId = eventId,
                 budgetLines = budgetLines,
                 onBack = { navController.popBackStack() },
-                onSave = { targetEventId, title, category, amount, notes, date ->
-                    eventViewModel.addExpense(targetEventId, title, category, amount, notes, date)
+                onSave = { result ->
+                    eventViewModel.addExpense(
+                        eventId = result.eventId,
+                        title = result.title,
+                        category = result.category,
+                        amount = result.amount,
+                        notes = result.notes,
+                        date = result.date,
+                        vendor = result.vendor,
+                        amountPaid = result.amountPaid,
+                        dueDate = result.dueDate,
+                        receiptPath = result.receiptPath
+                    )
                     navController.popBackStack()
                 }
             )
@@ -206,15 +255,19 @@ fun AppNavGraph(
                 budgetLines = budgetLines,
                 existing = expense,
                 onBack = { navController.popBackStack() },
-                onSave = { targetEventId, title, category, amount, notes, date ->
+                onSave = { result ->
                     eventViewModel.updateExpense(
                         expense.copy(
-                            eventId = targetEventId,
-                            title = title,
-                            category = category,
-                            amount = amount,
-                            notes = notes,
-                            dateCreated = date
+                            eventId = result.eventId,
+                            title = result.title,
+                            category = result.category,
+                            amount = result.amount,
+                            notes = result.notes,
+                            dateCreated = result.date,
+                            vendor = result.vendor,
+                            amountPaid = result.amountPaid,
+                            dueDate = result.dueDate,
+                            receiptPath = result.receiptPath
                         )
                     )
                     navController.popBackStack()

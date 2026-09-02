@@ -1,5 +1,6 @@
 package com.el.sapiospend.export
 
+import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.settings.ActiveCurrency
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
@@ -37,7 +38,11 @@ object XlsxReportWriter {
         // unit unstated — say it once here rather than on every amount.
         rows += row(text("Currency"), text(ActiveCurrency.value.code))
         rows += emptyRow()
-        rows += row(text("Event"), text("Type"), text("Budget"), text("Planned"), text("Spent"), text("Remaining"), text("% Used"), text("Status"))
+        rows += row(
+            text("Event"), text("Type"), text("Budget"), text("Planned"), text("Spent"),
+            text("Paid"), text("Outstanding"), text("Funding received"), text("Remaining"),
+            text("% Used"), text("Guests"), text("Cost per guest"), text("Status")
+        )
 
         report.sections.forEach { section ->
             val a = section.analytics
@@ -47,8 +52,15 @@ object XlsxReportWriter {
                 number(a.budget),
                 number(a.totalPlanned),
                 number(a.totalSpent),
+                number(a.totalPaid),
+                number(a.outstanding),
+                number(a.funding.received),
                 number(a.remaining),
                 number(percentUsed(a.totalSpent, a.budget)),
+                // Blank rather than zero when nobody was counted: a 0 in a guest column
+                // averages into any total the planner builds on top of this sheet.
+                a.guestCount?.let { number(it.toDouble()) } ?: XlsxWriter.Cell.Empty,
+                a.costPerGuest?.let { number(it) } ?: XlsxWriter.Cell.Empty,
                 text(if (a.isOverBudget) "Over budget" else "On track")
             )
         }
@@ -90,6 +102,21 @@ object XlsxReportWriter {
         rows += row(text("Planned"), number(a.totalPlanned))
         rows += row(text("Spent"), number(a.totalSpent))
         rows += row(text("Remaining"), number(a.remaining))
+        rows += row(text("Paid so far"), number(a.totalPaid))
+        rows += row(text("Still owed"), number(a.outstanding))
+        if (a.payments.overdueCount > 0) {
+            rows += row(text("Overdue"), number(a.payments.overdueAmount))
+        }
+        a.guestCount?.takeIf { it > 0 }?.let { guests ->
+            rows += row(text("Guests"), number(guests.toDouble()))
+            a.costPerGuest?.let { rows += row(text("Cost per guest"), number(it)) }
+            a.budgetPerGuest?.let { rows += row(text("Budget per guest"), number(it)) }
+        }
+        if (a.funding.total > 0) {
+            rows += row(text("Funding received"), number(a.funding.received))
+            rows += row(text("Funding pledged"), number(a.funding.pledged))
+            rows += row(text("Cash position"), number(a.cashPosition))
+        }
         rows += row(text("Daily burn rate"), number(a.dailyBurnRate))
         rows += row(text("Days tracked"), number(a.daysTracked.toDouble()))
         formatPeriod(a.periodStart, a.periodEnd)?.let { rows += row(text("Period"), text(it)) }
@@ -118,15 +145,38 @@ object XlsxReportWriter {
             rows += emptyRow()
         }
 
-        rows += row(text("Date"), text("Expense"), text("Category"), text("Amount"), text("Notes"))
+        rows += row(
+            text("Date"), text("Expense"), text("Category"), text("Vendor"), text("Amount"),
+            text("Paid"), text("Outstanding"), text("Status"), text("Due date"), text("Notes")
+        )
         section.expenses.forEach { expense ->
             rows += row(
                 text(expense.dateCreated.formatDate()),
                 text(expense.title),
                 text(expense.category),
+                text(expense.vendor),
                 number(expense.amount),
+                number(expense.amountPaid),
+                number(expense.outstanding),
+                text(Payments.statusOf(expense).label),
+                expense.dueDate?.let { text(it.formatDate()) } ?: XlsxWriter.Cell.Empty,
                 text(expense.notes)
             )
+        }
+
+        if (section.contributions.isNotEmpty()) {
+            rows += emptyRow()
+            rows += row(text("Funding"))
+            rows += row(text("Date"), text("From"), text("Amount"), text("Status"), text("Notes"))
+            section.contributions.forEach { contribution ->
+                rows += row(
+                    text((contribution.receivedAt ?: contribution.dateCreated).formatDate()),
+                    text(contribution.source),
+                    number(contribution.amount),
+                    text(if (contribution.isReceived) "Received" else "Pledged"),
+                    text(contribution.notes)
+                )
+            }
         }
 
         return XlsxWriter.Sheet(a.eventName, rows)

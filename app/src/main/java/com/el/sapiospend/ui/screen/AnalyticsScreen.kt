@@ -37,11 +37,12 @@ fun AnalyticsScreen(
     val events by eventViewModel.events.collectAsState()
     val allExpenses by eventViewModel.allExpenses.collectAsState()
     val budgetLines by eventViewModel.budgetLines.collectAsState()
+    val contributions by eventViewModel.contributions.collectAsState()
 
     // Recomputed only when the underlying data changes rather than on every recomposition
     // — this walks every expense of every event.
-    val portfolio = remember(events, allExpenses, budgetLines) {
-        BudgetAnalytics.portfolio(events, allExpenses, budgetLines)
+    val portfolio = remember(events, allExpenses, budgetLines, contributions) {
+        BudgetAnalytics.portfolio(events, allExpenses, budgetLines, contributions)
     }
     val monthlySpend = remember(allExpenses) { SpendTrend.monthly(allExpenses) }
     val shareOfSpend = remember(portfolio) { shareSlices(portfolio.topCategories) }
@@ -138,6 +139,32 @@ fun AnalyticsScreen(
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 11.sp
                         )
+
+                        // Committed against paid across the whole portfolio. Only when
+                        // something is actually owed — otherwise these three figures are
+                        // the row above, restated.
+                        if (portfolio.totalOutstanding > 0) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                PortfolioStat("Paid", portfolio.totalPaid.formatMoney(), Color.White)
+                                PortfolioStat("Still owed", portfolio.totalOutstanding.formatMoney(), Color(0xFFFBBF24))
+                                PortfolioStat(
+                                    "Overdue",
+                                    if (portfolio.overdueCount > 0) portfolio.totalOverdue.formatMoney() else "None",
+                                    if (portfolio.overdueCount > 0) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        if (portfolio.totalReceived > 0 || portfolio.totalPledged > 0) {
+                            Text(
+                                buildString {
+                                    append("${portfolio.totalReceived.formatMoney()} funding received")
+                                    if (portfolio.totalPledged > 0) append(" · ${portfolio.totalPledged.formatMoney()} pledged")
+                                },
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }
@@ -249,6 +276,35 @@ fun AnalyticsScreen(
                                     fontSize = 11.sp
                                 )
                             }
+                        }
+
+                        // Per-head figures only for an event that has been counted, and
+                        // only on the second row where the pacing figures already live.
+                        if (analytics.guestCount != null || analytics.outstanding > 0) {
+                            Row(Modifier.fillMaxWidth()) {
+                                analytics.costPerGuest?.let {
+                                    AnalyticsStat("Per guest", it.formatMoney(), Modifier.weight(1f))
+                                }
+                                analytics.guestCount?.let {
+                                    AnalyticsStat("Guests", "$it", Modifier.weight(1f))
+                                }
+                                if (analytics.outstanding > 0) {
+                                    AnalyticsStat(
+                                        "Still owed",
+                                        analytics.outstanding.formatMoney(),
+                                        Modifier.weight(1f),
+                                        valueColor = if (analytics.payments.overdueCount > 0) AppColors.Danger else AppColors.Warning
+                                    )
+                                }
+                            }
+                        }
+
+                        if (analytics.funding.total > 0) {
+                            Text(
+                                "${analytics.funding.received.formatMoney()} in hand · ${analytics.cashPosition.formatMoney()} after what has been paid out",
+                                color = if (analytics.cashPosition < 0) AppColors.Danger else AppColors.Secondary,
+                                fontSize = 11.sp
+                            )
                         }
 
                         analytics.biggestOverrun?.let { overrun ->

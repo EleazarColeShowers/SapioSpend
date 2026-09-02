@@ -37,7 +37,7 @@ class DailyDigestTest {
     private fun portfolio(
         events: List<EventEntity>,
         expenses: List<ExpenseEntity> = emptyList()
-    ): PortfolioAnalytics = BudgetAnalytics.portfolio(events, expenses, emptyList<BudgetLineEntity>(), now)
+    ): PortfolioAnalytics = BudgetAnalytics.portfolio(events, expenses, emptyList<BudgetLineEntity>(), now = now)
 
     private fun expense(eventId: String, amount: Double) =
         ExpenseEntity(eventId = eventId, title = "Catering", category = "Food", amount = amount)
