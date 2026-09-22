@@ -1,9 +1,156 @@
 <resources>
     <string name="app_name">Sapio Spend</string>
+    <string name="app_tagline">Plan and track every budget</string>
+
+    <!--
+      Vocabulary.
+
+      One noun per concept, and every screen draws its wording from here so the three
+      words for the same thing ("event", "budget", "plan") cannot come back:
+
+        budget      the thing the user creates - a wedding, or a salary month
+        total       the amount of money that budget has
+        category    one line of the breakdown, with a planned amount and an actual spend
+
+      "Event" survives only inside the code (EventEntity, eventId); nothing the user
+      reads says it.
+    -->
+    <string name="label_total">Total</string>
+    <string name="label_spent">Spent</string>
+    <string name="label_remaining">Remaining</string>
+    <string name="label_left">Left</string>
+    <string name="label_paid">Paid</string>
+    <string name="label_still_owed">Still owed</string>
+    <string name="label_overdue">Overdue</string>
+    <string name="label_received">Received</string>
+    <string name="label_pledged">Pledged</string>
+    <string name="label_cash_left">Cash left</string>
+    <string name="label_planned">Planned</string>
+    <string name="label_over_by">Over by</string>
+    <string name="label_unallocated">Unallocated</string>
+    <string name="label_overview">Overview</string>
+    <string name="label_over_budget">Over budget</string>
+    <string name="action_back">Back</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_budgets">Budgets</string>
+    <string name="nav_insights">Insights</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="home_search_hint">Search budgets, vendors, expenses</string>
+    <string name="home_search_clear">Clear search</string>
+    <string name="home_search_empty_title">Nothing matches \"%1$s\"</string>
+    <string name="home_search_empty_subtitle">Searched budget names, expense titles, vendors, categories and notes</string>
+    <string name="home_section_budgets">Budgets  %1$d</string>
+    <string name="home_section_expenses">Expenses  %1$d</string>
+    <string name="home_section_expenses_capped">Expenses  first %1$d</string>
+    <string name="home_empty_title">No budgets yet</string>
+    <string name="home_empty_subtitle">Tap + to create your first budget</string>
+    <string name="home_add_budget">Add budget</string>
+    <string name="home_free_limit_reached">You\'ve used all %1$d free budgets</string>
+    <string name="home_free_limit_one_left">1 free budget left</string>
+    <string name="home_upgrade">Upgrade</string>
+
+    <!-- Creating a budget -->
+    <string name="create_title">New Budget</string>
+    <string name="create_action">Create Budget</string>
+    <string name="create_step_type_title">What are you planning?</string>
+    <string name="create_step_template_title">Pick a starting point</string>
+    <string name="create_step_type_subtitle">Step 1 of 3 · Choose a type</string>
+    <string name="create_step_template_subtitle">Step 2 of 3 · %1$s</string>
+    <string name="create_step_details_subtitle">Step 3 of 3 · %1$s · %2$s</string>
+    <string name="create_use_planned_total">Use %1$s as the total</string>
+
+    <!-- A budget's own fields -->
+    <string name="field_name">Budget Name</string>
+    <string name="field_name_hint">e.g. What you\'re planning for</string>
+    <string name="field_total">Total (%1$s)</string>
+    <string name="field_take_home_pay">Take-Home Pay (%1$s)</string>
+    <string name="field_type">Budget Type</string>
+    <string name="field_period">Budget Period</string>
+    <string name="field_period_month">Budget Month</string>
+    <string name="field_total_must_be_positive">Total must be greater than zero</string>
+    <string name="field_total_needed_for_preview">Enter a total to preview the breakdown</string>
+
+    <!-- Budget detail -->
+    <string name="detail_not_found">Budget not found</string>
+    <string name="detail_edit">Edit budget</string>
+    <string name="detail_edit_title">Edit Budget</string>
+    <string name="detail_delete">Delete budget</string>
+    <string name="detail_delete_title">Delete Budget</string>
+    <string name="detail_delete_message">Delete \"%1$s\" and all its expenses? This cannot be undone.</string>
+    <string name="detail_change_period">Change budget period</string>
+    <string name="detail_funding_remove">Remove \"%1$s\" from this budget\'s funding?</string>
+    <string name="detail_recurring_stop">Stop recording \"%1$s\"? The expenses it has already created stay on the budget.</string>
+    <string name="detail_recurring_ends">Stops when the budget period ends on %1$s.</string>
+    <string name="detail_unfunded">%1$s of the budget is still unfunded</string>
+
+    <!-- Categories: the breakdown of a total, one row per category -->
+    <string name="categories_title">Categories</string>
+    <string name="categories_edit">Edit categories</string>
+    <string name="categories_set">Set categories</string>
+    <string name="categories_save">Save categories</string>
+    <string name="categories_planned_vs_actual">Planned vs Actual</string>
+    <string name="categories_hint">Set what you intend to spend on each. Clear a row to remove that category.</string>
+    <string name="categories_empty_prompt">Set what you intend to spend on each category, and every figure on this screen gets something to be measured against.</string>
+    <string name="categories_over_total">Your categories add up to more than the total</string>
+    <string name="categories_over_total_savable">Your categories add up to more than the total. You can still save it.</string>
+    <string name="categories_allocated">%1$d%% of the total is assigned to a category</string>
+    <string name="categories_unallocated">%1$s of the total is unallocated</string>
+    <string name="categories_unplanned">no planned amount</string>
+    <string name="categories_custom">My Own Categories</string>
+    <string name="categories_custom_blurb">Write your own categories and amounts — free to use</string>
+    <string name="home_percent_used">%1$d%% of the total used</string>
+    <string name="home_still_to_pay"> · %1$s still to pay</string>
+    <string name="categories_over_planned">%1$s is %2$s over its planned amount</string>
+
+    <!-- Insights -->
+    <string name="insights_title">Insights</string>
+    <string name="insights_subtitle_one">Across 1 budget</string>
+    <string name="insights_subtitle_many">Across all %1$d budgets</string>
+    <string name="insights_empty_title">Nothing to analyse yet</string>
+    <string name="insights_empty_subtitle">Create a budget and log some expenses</string>
+    <string name="insights_by_budget">By Budget</string>
+    <string name="insights_projected_overspend">At this pace you finish %1$s over the total</string>
+
+    <!-- Expense form -->
+    <string name="expense_budget_label">Budget</string>
+    <string name="expense_move_note">Moving this expense takes its amount off the old budget\'s total and onto this one.</string>
+
+    <!-- Settings -->
+    <string name="settings_alerts_title">Budget alerts</string>
+    <string name="settings_alerts_subtitle">When a budget passes 80%% of its total, and again when it goes over</string>
+    <string name="settings_reminders_title">Period reminders</string>
+    <string name="settings_reminders_subtitle">Before a budget period ends, and on its closing day</string>
+
+    <!-- Paywall -->
+    <string name="paywall_limit_headline">You\'ve used all %1$d free budgets</string>
+    <string name="paywall_limit_subhead">Upgrade to Pro to keep planning without limits.</string>
+    <string name="paywall_templates_headline">Templates are a Pro feature</string>
+    <string name="paywall_templates_subhead">Start from a proven breakdown instead of a blank page.</string>
+    <string name="paywall_insights_headline">Insights are a Pro feature</string>
+    <string name="paywall_insights_subhead">See planned vs actual, burn rate and category variance.</string>
+    <string name="paywall_export_headline">Exports are a Pro feature</string>
+    <string name="paywall_export_subhead">Send clients a PDF report or take the numbers into Excel.</string>
+    <string name="pro_unlimited_budgets">Unlimited budgets</string>
+    <string name="pro_unlimited_budgets_blurb">Run as many budgets as you have clients</string>
+    <string name="pro_templates">Budget templates</string>
+    <string name="pro_templates_blurb">Start from a proven breakdown instead of a blank page</string>
+    <string name="pro_insights">Spending insights</string>
+    <string name="pro_insights_blurb">Planned vs actual, burn rate, and category variance</string>
+    <string name="pro_pdf_export">PDF export</string>
+    <string name="pro_pdf_export_blurb">Client-ready budget reports</string>
+    <string name="pro_excel_export">Excel export</string>
+    <string name="pro_excel_export_blurb">Take the numbers into your own spreadsheets</string>
+
+    <!-- Update prompt -->
     <string name="update_ready_message">An update is ready to install</string>
     <string name="update_ready_action">Restart</string>
+
+    <!-- Home screen widget -->
     <string name="widget_label">LEFT TO SPEND</string>
     <string name="widget_add_expense">+ Log an expense</string>
-    <string name="widget_description">Budget left across your events, and a shortcut to log a spend.</string>
-    <string name="widget_empty">No events yet</string>
+    <string name="widget_description">Money left across your budgets, and a shortcut to log a spend.</string>
+    <string name="widget_empty">No budgets yet</string>
 </resources>

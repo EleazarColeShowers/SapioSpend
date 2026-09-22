@@ -60,10 +60,10 @@ class BudgetWidget : AppWidgetProvider() {
         val events = repository.events.first()
         val expenses = repository.allExpenses.first()
 
-        // Read from storage rather than from ActiveCurrency: the widget is drawn in a
-        // process that may never have opened the app — after a reboot, or an update — and
-        // the global would still be sitting at its default.
-        val currency = SettingsRepository.create(context).currency.value
+        // Read from storage rather than from the ActiveCurrency globals: the widget is
+        // drawn in a process that may never have opened the app — after a reboot, or an
+        // update — and those would still be sitting at their defaults.
+        val currency = SettingsRepository.create(context).moneyStyle()
 
         val budget = events.sumOf { it.budget }
         val spent = expenses.sumOf { it.amount }

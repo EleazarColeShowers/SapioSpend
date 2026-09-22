@@ -1,5 +1,6 @@
 package com.el.sapiospend.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,11 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.el.sapiospend.R
 import com.el.sapiospend.domain.template.BudgetTemplate
 import com.el.sapiospend.domain.template.BudgetTemplates
 import com.el.sapiospend.domain.template.CategoryAmount
@@ -37,6 +40,7 @@ import com.el.sapiospend.ui.component.ProBadge
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.util.DateUtils
 import com.el.sapiospend.util.formatMoney
+import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatPeriod
 import com.el.sapiospend.settings.ActiveCurrency
 
@@ -115,7 +119,10 @@ fun AddEventScreen(
         }
     }
 
-    val budgetValue = budget.toDoubleOrNull() ?: 0.0
+    // In the base currency from here on, so it can be compared against the planned
+    // total — which [CustomPlan] parses the same way — and saved without a second
+    // conversion step that could be forgotten.
+    val budgetValue = budget.parseAmount() ?: 0.0
     val canSave = eventName.isNotBlank() && budgetValue > 0
 
     val templates = remember(selectedType) { BudgetTemplates.forEventType(selectedType) }
@@ -134,6 +141,20 @@ fun AddEventScreen(
         unfocusedContainerColor = AppColors.Surface
     )
 
+    // Back walks the steps before it leaves the screen, so a wrong turn at step three
+    // doesn't throw away the two choices before it. The system back button and gesture
+    // go through the same route as the arrow — otherwise they would pop the whole wizard
+    // off the stack from step three and lose everything picked along the way.
+    fun goBack() {
+        when (step) {
+            WizardStep.TYPE -> onBack()
+            WizardStep.TEMPLATE -> step = WizardStep.TYPE
+            WizardStep.DETAILS -> step = WizardStep.TEMPLATE
+        }
+    }
+
+    BackHandler(onBack = ::goBack)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -146,27 +167,23 @@ fun AddEventScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         val title = when (step) {
-            WizardStep.TYPE -> "What are you planning?"
-            WizardStep.TEMPLATE -> "Pick a starting point"
-            WizardStep.DETAILS -> if (isPersonal) "New Budget" else "New Event"
+            WizardStep.TYPE -> stringResource(R.string.create_step_type_title)
+            WizardStep.TEMPLATE -> stringResource(R.string.create_step_template_title)
+            WizardStep.DETAILS -> stringResource(R.string.create_title)
         }
         val subtitle = when (step) {
-            WizardStep.TYPE -> "Step 1 of 3 · Choose a type"
-            WizardStep.TEMPLATE -> "Step 2 of 3 · $selectedType"
-            WizardStep.DETAILS -> "Step 3 of 3 · $selectedType · ${startingPointLabel(selectedTemplate, isCustomPlan)}"
+            WizardStep.TYPE -> stringResource(R.string.create_step_type_subtitle)
+            WizardStep.TEMPLATE -> stringResource(R.string.create_step_template_subtitle, selectedType)
+            WizardStep.DETAILS -> stringResource(
+                R.string.create_step_details_subtitle,
+                selectedType,
+                startingPointLabel(selectedTemplate, isCustomPlan)
+            )
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = {
-                // Back walks the steps before it leaves the screen, so a wrong turn at
-                // step three doesn't throw away the two choices before it.
-                when (step) {
-                    WizardStep.TYPE -> onBack()
-                    WizardStep.TEMPLATE -> step = WizardStep.TYPE
-                    WizardStep.DETAILS -> step = WizardStep.TEMPLATE
-                }
-            }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Secondary)
+            IconButton(onClick = ::goBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = AppColors.Secondary)
             }
             Spacer(Modifier.width(4.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -276,8 +293,8 @@ fun AddEventScreen(
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     ChoiceRow(
-                        title = "Custom Plan",
-                        subtitle = "Write your own categories and amounts — free to use",
+                        title = stringResource(R.string.categories_custom),
+                        subtitle = stringResource(R.string.categories_custom_blurb),
                         selected = isCustomPlan,
                         onClick = {
                             isCustomPlan = true
@@ -299,7 +316,7 @@ fun AddEventScreen(
                         OutlinedTextField(
                             value = eventName,
                             onValueChange = { eventName = it },
-                            label = { Text(if (isPersonal) "Budget Name" else "Event Name") },
+                            label = { Text(stringResource(R.string.field_name)) },
                             placeholder = { Text(namePlaceholder(selectedType, isCustomPlan)) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -312,7 +329,12 @@ fun AddEventScreen(
                         OutlinedTextField(
                             value = budget,
                             onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) budget = v },
-                            label = { Text(if (isPersonal) "Take-Home Pay (${ActiveCurrency.value.symbol})" else "Total Budget (${ActiveCurrency.value.symbol})") },
+                            label = {
+                                Text(
+                                    if (isPersonal) stringResource(R.string.field_take_home_pay, ActiveCurrency.value.symbol)
+                                    else stringResource(R.string.field_total, ActiveCurrency.value.symbol)
+                                )
+                            },
                             placeholder = { Text("e.g. 100000") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -322,7 +344,7 @@ fun AddEventScreen(
                             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                             isError = budget.isNotBlank() && budgetValue <= 0,
                             supportingText = if (budget.isNotBlank() && budgetValue <= 0) {
-                                { Text("Budget must be greater than zero", color = AppColors.Danger, fontSize = 11.sp) }
+                                { Text(stringResource(R.string.field_total_must_be_positive), color = AppColors.Danger, fontSize = 11.sp) }
                             } else null
                         )
 
@@ -354,7 +376,8 @@ fun AddEventScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                if (isPersonal) "Budget Month" else "Budget Period",
+                                if (isPersonal) stringResource(R.string.field_period_month)
+                                else stringResource(R.string.field_period),
                                 color = AppColors.Secondary,
                                 fontSize = 12.sp,
                                 letterSpacing = 0.5.sp
@@ -459,7 +482,7 @@ fun AddEventScreen(
                             ),
                             enabled = canSave
                         ) {
-                            Text(if (isPersonal) "Create Budget" else "Create Event", fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.create_action), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -487,9 +510,14 @@ fun AddEventScreen(
     }
 }
 
-/** What step three says the plan is based on. */
+/**
+ * What step three says the breakdown is based on. Composable so the custom-plan case
+ * reads the same resource the card offering it does, rather than a second copy of the
+ * wording that can drift away from it.
+ */
+@Composable
 private fun startingPointLabel(template: BudgetTemplate?, isCustomPlan: Boolean): String = when {
-    isCustomPlan -> "Custom Plan"
+    isCustomPlan -> stringResource(R.string.categories_custom)
     template != null -> template.name
     else -> "No template"
 }
@@ -549,7 +577,7 @@ private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double) {
         Text(template.description, color = AppColors.Secondary, fontSize = 12.sp)
 
         if (budgetValue <= 0) {
-            Text("Enter a budget to preview the breakdown", color = AppColors.Border, fontSize = 12.sp)
+            Text(stringResource(R.string.field_total_needed_for_preview), color = AppColors.Border, fontSize = 12.sp)
             return@Column
         }
 
@@ -689,7 +717,7 @@ private fun CustomPlanEditor(
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
-                        "Use ${planned.formatMoney()} as the total budget",
+                        stringResource(R.string.create_use_planned_total, planned.formatMoney()),
                         color = AppColors.Black,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -698,7 +726,7 @@ private fun CustomPlanEditor(
                 // Overshooting is allowed — the event still saves. Saying so beats a
                 // blocked button the user cannot explain.
                 overBudget -> Text(
-                    "Your categories add up to more than the budget. You can still save it.",
+                    stringResource(R.string.categories_over_total_savable),
                     color = AppColors.Danger,
                     fontSize = 11.sp
                 )

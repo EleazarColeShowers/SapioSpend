@@ -9,11 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -30,8 +29,11 @@ import com.el.sapiospend.billing.PlanRules
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.el.sapiospend.domain.search.GlobalSearch
+import com.el.sapiospend.R
+import com.el.sapiospend.billing.FreePlanLimits
 import com.el.sapiospend.export.ReportBuilder
 import com.el.sapiospend.ui.component.ExportMenu
+import com.el.sapiospend.ui.component.OverviewStat
 import com.el.sapiospend.ui.component.PaywallTrigger
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
@@ -46,8 +48,6 @@ fun HomeScreen(
     onEventClick: (String) -> Unit = {},
     /** Opens one expense for correction, from a search result. */
     onExpenseClick: (String) -> Unit = {},
-    onAnalyticsClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {},
     onRequirePro: (PaywallTrigger) -> Unit = {},
     eventViewModel: EventViewModel,
     exportViewModel: ExportViewModel
@@ -116,13 +116,10 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        Text("Event budget planner", color = AppColors.Secondary, fontSize = 14.sp)
+                        Text(stringResource(R.string.app_tagline), color = AppColors.Secondary, fontSize = 14.sp)
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onAnalyticsClick) {
-                            Icon(Icons.Default.BarChart, contentDescription = "Analytics", tint = AppColors.Secondary)
-                        }
                         ExportMenu(
                             proUnlocked = proUnlocked,
                             isExporting = isExporting,
@@ -134,9 +131,6 @@ fun HomeScreen(
                             },
                             onRequirePro = { onRequirePro(PaywallTrigger.EXPORT) }
                         )
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = AppColors.Secondary)
-                        }
                     }
                 }
             }
@@ -146,7 +140,7 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Search events, vendors, expenses", fontSize = 13.sp) },
+                    placeholder = { Text(stringResource(R.string.home_search_hint), fontSize = 13.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.Border, modifier = Modifier.size(18.dp))
                     },
@@ -156,7 +150,7 @@ fun HomeScreen(
                                 query = ""
                                 focusManager.clearFocus()
                             }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear search", tint = AppColors.Secondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.home_search_clear), tint = AppColors.Secondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
@@ -197,15 +191,15 @@ fun HomeScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Nothing matches \"${query.trim()}\"", color = AppColors.OnSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                Text("Searched event names, expense titles, vendors, categories and notes", color = AppColors.Secondary, fontSize = 12.sp)
+                                Text(stringResource(R.string.home_search_empty_title, query.trim()), color = AppColors.OnSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                Text(stringResource(R.string.home_search_empty_subtitle), color = AppColors.Secondary, fontSize = 12.sp)
                             }
                         }
                     }
                 } else {
                     if (results.events.isNotEmpty()) {
                         item {
-                            Text("Events  ${results.events.size}", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                            Text(stringResource(R.string.home_section_budgets, results.events.size), color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
                         }
                         items(results.events, key = { "event-" + it.id }) { event ->
                             val spent = allExpenses.filter { it.eventId == event.id }.sumOf { it.amount }
@@ -224,8 +218,8 @@ fun HomeScreen(
                                 // planner searching "deposit" needs to know they are
                                 // looking at the first forty and not at all of them.
                                 if (results.expenses.size >= GlobalSearch.MAX_EXPENSE_HITS)
-                                    "Expenses  first ${results.expenses.size}"
-                                else "Expenses  ${results.expenses.size}",
+                                    stringResource(R.string.home_section_expenses_capped, results.expenses.size)
+                                else stringResource(R.string.home_section_expenses, results.expenses.size),
                                 color = AppColors.Secondary,
                                 fontSize = 12.sp,
                                 letterSpacing = 0.5.sp
@@ -268,14 +262,15 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                if (remainingFreeEvents == 0) "You've used all 3 free events"
-                                else "1 free event left",
+                                if (remainingFreeEvents == 0)
+                                    stringResource(R.string.home_free_limit_reached, FreePlanLimits.MAX_ACTIVE_EVENTS)
+                                else stringResource(R.string.home_free_limit_one_left),
                                 color = AppColors.Warning,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                "Upgrade",
+                                stringResource(R.string.home_upgrade),
                                 color = AppColors.Warning,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -296,17 +291,18 @@ fun HomeScreen(
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Overview", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
+                        Text(stringResource(R.string.label_overview), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OverviewStat("Budget", totalBudget.formatMoney(), Color.White)
-                            OverviewStat("Spent", totalSpent.formatMoney(), Color(0xFFFF6B6B))
+                            OverviewStat(stringResource(R.string.label_total), totalBudget.formatMoney(), Color.White, Modifier.weight(1f))
+                            OverviewStat(stringResource(R.string.label_spent), totalSpent.formatMoney(), Color(0xFFFF6B6B), Modifier.weight(1f))
                             OverviewStat(
-                                "Remaining",
+                                stringResource(R.string.label_remaining),
                                 remaining.formatMoney(),
-                                if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
+                                if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B),
+                                Modifier.weight(1f)
                             )
                         }
                         LinearProgressIndicator(
@@ -320,11 +316,18 @@ fun HomeScreen(
                         )
                         Text(
                             buildString {
-                                append("${if (totalBudget > 0) ((totalSpent / totalBudget) * 100).toInt() else 0}% of total budget used")
+                                append(
+                                    stringResource(
+                                        R.string.home_percent_used,
+                                        if (totalBudget > 0) ((totalSpent / totalBudget) * 100).toInt() else 0
+                                    )
+                                )
                                 // Only when there is a balance: on an app where every
                                 // expense is paid the moment it is logged, a permanent
                                 // "₦0 still to pay" is a line that never says anything.
-                                if (outstanding > 0) append(" · ${outstanding.formatMoney()} still to pay")
+                                if (outstanding > 0) {
+                                    append(stringResource(R.string.home_still_to_pay, outstanding.formatMoney()))
+                                }
                             },
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 11.sp
@@ -354,9 +357,9 @@ fun HomeScreen(
                                 tint = AppColors.Border,
                                 modifier = Modifier.size(40.dp)
                             )
-                            Text("No events yet", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.home_empty_title), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Tap + to create your first event",
+                                stringResource(R.string.home_empty_subtitle),
                                 color = AppColors.Secondary,
                                 fontSize = 13.sp
                             )
@@ -366,7 +369,7 @@ fun HomeScreen(
             } else {
                 item {
                     Text(
-                        "Events  ${events.size}",
+                        stringResource(R.string.home_section_budgets, events.size),
                         color = AppColors.Secondary,
                         fontSize = 12.sp,
                         letterSpacing = 0.5.sp
@@ -414,7 +417,7 @@ fun HomeScreen(
                                                 .background(AppColors.Danger.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                         ) {
-                                            Text("Over budget", color = AppColors.Danger, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                            Text(stringResource(R.string.label_over_budget), color = AppColors.Danger, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                         }
                                     }
                                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = AppColors.Border, modifier = Modifier.size(20.dp))
@@ -422,10 +425,10 @@ fun HomeScreen(
                             }
 
                             Row(Modifier.fillMaxWidth()) {
-                                MiniStat("Budget", event.budget.formatMoney(), Modifier.weight(1f))
-                                MiniStat("Spent", eventSpent.formatMoney(), Modifier.weight(1f))
+                                MiniStat(stringResource(R.string.label_total), event.budget.formatMoney(), Modifier.weight(1f))
+                                MiniStat(stringResource(R.string.label_spent), eventSpent.formatMoney(), Modifier.weight(1f))
                                 MiniStat(
-                                    "Left",
+                                    stringResource(R.string.label_left),
                                     eventRemaining.formatMoney(),
                                     Modifier.weight(1f),
                                     valueColor = if (overBudget) AppColors.Danger else AppColors.Success
@@ -461,7 +464,7 @@ fun HomeScreen(
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add event")
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.home_add_budget))
         }
     }
 }
@@ -493,14 +496,6 @@ private fun ResultRow(
                 Text(it, color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             }
         }
-    }
-}
-
-@Composable
-private fun OverviewStat(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
     }
 }
 

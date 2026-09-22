@@ -28,11 +28,11 @@ object NotificationChannels {
 
         manager.createNotificationChannel(
             NotificationChannel(ALERTS, "Budget alerts", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "When spending on an event passes 80% or goes over budget"
+                description = "When spending on a budget passes 80% or goes over"
             }
         )
         manager.createNotificationChannel(
-            NotificationChannel(REMINDERS, "Event reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            NotificationChannel(REMINDERS, "Period reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "When a budget period is about to end"
             }
         )

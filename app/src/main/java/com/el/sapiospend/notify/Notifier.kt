@@ -30,15 +30,16 @@ class Notifier(private val context: Context) {
     private val manager = NotificationManagerCompat.from(context)
 
     /**
-     * Read from storage rather than from [com.el.sapiospend.settings.ActiveCurrency].
+     * Read from storage rather than from the [com.el.sapiospend.settings.ActiveCurrency]
+     * globals.
      *
-     * That global is seeded by MainActivity, and the daily tick runs in a process that
-     * may never have opened MainActivity — a phone rebooted overnight wakes straight into
-     * the alarm. Reading the global there would quietly format a dollar budget in naira.
-     * Lazy so the scheduler, which builds a Notifier only to ask [canPost], does not touch
+     * Those are seeded by MainActivity, and the daily tick runs in a process that may
+     * never have opened MainActivity — a phone rebooted overnight wakes straight into the
+     * alarm. Reading them there would quietly format a dollar budget in naira. Lazy so the
+     * scheduler, which builds a Notifier only to ask [canPost], does not touch
      * SharedPreferences for nothing.
      */
-    private val currency by lazy { SettingsRepository.create(context).currency.value }
+    private val currency by lazy { SettingsRepository.create(context).moneyStyle() }
 
     /**
      * Whether a notification posted right now would be seen.

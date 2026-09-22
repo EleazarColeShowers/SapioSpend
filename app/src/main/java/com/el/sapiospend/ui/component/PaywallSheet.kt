@@ -1,5 +1,6 @@
 package com.el.sapiospend.ui.component
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -9,24 +10,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.el.sapiospend.BuildConfig
+import com.el.sapiospend.R
 import com.el.sapiospend.billing.FreePlanLimits
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.ProFeature
 import com.el.sapiospend.ui.theme.AppColors
 
 /** What prompted the paywall, so the sheet can lead with the relevant line. */
-enum class PaywallTrigger(val headline: String, val subhead: String) {
-    EVENT_LIMIT(
-        "You've used all ${FreePlanLimits.MAX_ACTIVE_EVENTS} free events",
-        "Upgrade to Pro to keep planning without limits."
-    ),
-    TEMPLATES("Templates are a Pro feature", "Start from a proven budget breakdown instead of a blank page."),
-    ANALYTICS("Analytics is a Pro feature", "See planned vs actual, burn rate and category variance."),
-    EXPORT("Exports are a Pro feature", "Send clients a PDF report or take the numbers into Excel.")
+enum class PaywallTrigger(@get:StringRes val headline: Int, @get:StringRes val subhead: Int) {
+    EVENT_LIMIT(R.string.paywall_limit_headline, R.string.paywall_limit_subhead),
+    TEMPLATES(R.string.paywall_templates_headline, R.string.paywall_templates_subhead),
+    ANALYTICS(R.string.paywall_insights_headline, R.string.paywall_insights_subhead),
+    EXPORT(R.string.paywall_export_headline, R.string.paywall_export_subhead)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,13 +50,15 @@ fun PaywallSheet(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    trigger.headline,
+                    if (trigger == PaywallTrigger.EVENT_LIMIT)
+                        stringResource(trigger.headline, FreePlanLimits.MAX_ACTIVE_EVENTS)
+                    else stringResource(trigger.headline),
                     color = AppColors.OnSurface,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.3).sp
                 )
-                Text(trigger.subhead, color = AppColors.Secondary, fontSize = 14.sp)
+                Text(stringResource(trigger.subhead), color = AppColors.Secondary, fontSize = 14.sp)
             }
 
             HorizontalDivider(color = AppColors.Border)
@@ -77,12 +79,12 @@ fun PaywallSheet(
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text(
-                                feature.label,
+                                stringResource(feature.label),
                                 color = AppColors.OnSurface,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
-                            Text(feature.blurb, color = AppColors.Secondary, fontSize = 12.sp)
+                            Text(stringResource(feature.blurb), color = AppColors.Secondary, fontSize = 12.sp)
                         }
                     }
                 }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.LaunchedEffect
@@ -22,7 +21,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
@@ -36,7 +34,9 @@ import com.el.sapiospend.notify.AndroidBudgetAlertPublisher
 import com.el.sapiospend.notify.NotificationChannels
 import com.el.sapiospend.notify.NotificationScheduler
 import com.el.sapiospend.notify.Notifier
+import com.el.sapiospend.settings.ActiveBase
 import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.ActiveRates
 import com.el.sapiospend.settings.SettingsRepository
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
@@ -68,14 +68,17 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Seeded into [ActiveCurrency] the moment it is built rather than collected into it,
-     * so the very first frame already formats in the user's currency. A collector alone
-     * would render one frame of naira before catching up, which on a cold start is a
-     * visible flicker of the wrong symbol.
+     * Seeded into the currency globals the moment it is built rather than collected into
+     * them, so the very first frame already formats in the user's currency at the user's
+     * rates. A collector alone would render one frame of unconverted naira before catching
+     * up, which on a cold start is a visible flicker of the wrong figure.
      */
     private val settingsRepository: SettingsRepository by lazy {
-        SettingsRepository.create(applicationContext)
-            .also { ActiveCurrency.value = it.currency.value }
+        SettingsRepository.create(applicationContext).also {
+            ActiveCurrency.value = it.currency.value
+            ActiveBase.value = it.baseCurrency.value
+            ActiveRates.value = it.rates.value
+        }
     }
 
     // Constructed here rather than lazily: registering the update flow's result launcher
@@ -132,6 +135,20 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             settingsRepository.currency.collect { ActiveCurrency.value = it }
         }
+        lifecycleScope.launch {
+            settingsRepository.baseCurrency.collect { ActiveBase.value = it }
+        }
+        lifecycleScope.launch {
+            settingsRepository.rates.collect { ActiveRates.value = it }
+        }
+
+        // One attempt at fresher exchange rates per launch, entirely in the background.
+        // Nothing waits on it and nothing reports it failing: the app is already
+        // converting with the rates it has, and the only outcome of success is that the
+        // figures get slightly more accurate partway through the session. An offline
+        // phone simply never gets past the first socket timeout, which is the intended
+        // behaviour rather than a degraded one.
+        lifecycleScope.launch { settingsRepository.refreshRatesIfDue() }
 
         // Every change to the notification preferences moves the alarm — a new hour, or
         // no alarm at all once the last scheduled notification is switched off.
@@ -165,25 +182,20 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
+                    .navigationBarsPadding()
             ) {
                 AppNavGraph(
                     navController = navController,
                     eventViewModel = eventViewModel,
                     exportViewModel = exportViewModel,
                     settingsRepository = settingsRepository,
+                    snackbarHostState = snackbarHostState,
                     openEventId = pendingEventId,
                     onEventOpened = { pendingEventId = null },
                     quickAdd = pendingQuickAdd,
                     onQuickAddHandled = { pendingQuickAdd = false },
                     notificationsAllowed = notificationsAllowed,
                     onRequestNotificationPermission = ::requestNotificationPermission
-                )
-
-                SnackbarHost(
-                    hostState = snackbarHostState,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
                 )
             }
         }

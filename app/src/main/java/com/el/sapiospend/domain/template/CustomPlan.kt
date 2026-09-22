@@ -1,5 +1,6 @@
 package com.el.sapiospend.domain.template
 
+import com.el.sapiospend.util.parseAmount
 import java.util.UUID
 
 /**
@@ -50,7 +51,7 @@ object CustomPlan {
         val merged = LinkedHashMap<String, CategoryAmount>()
         inputs.forEach { input ->
             val name = input.name.trim()
-            val amount = input.amount.toDoubleOrNull() ?: 0.0
+            val amount = input.amount.parseAmount() ?: 0.0
             if (name.isEmpty() || amount <= 0) return@forEach
 
             val key = name.lowercase()

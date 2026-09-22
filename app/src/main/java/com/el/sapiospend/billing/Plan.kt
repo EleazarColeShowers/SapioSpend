@@ -1,18 +1,26 @@
 package com.el.sapiospend.billing
 
+import androidx.annotation.StringRes
+import com.el.sapiospend.R
+
 /** Subscription tiers. Agency and White Label arrive once there is a backend to scope them to. */
 enum class Plan(val displayName: String, val priceLabel: String) {
     FREE("Free", "₦0"),
     PRO("Pro", "₦5,000/month")
 }
 
-/** Everything behind the paywall. Each entry is one line in the upgrade sheet. */
-enum class ProFeature(val label: String, val blurb: String) {
-    UNLIMITED_EVENTS("Unlimited events", "Run as many events as you have clients"),
-    TEMPLATES("Budget templates", "Start from a proven breakdown instead of a blank page"),
-    ANALYTICS("Spending analytics", "Planned vs actual, burn rate, and category variance"),
-    PDF_EXPORT("PDF export", "Client-ready budget reports"),
-    EXCEL_EXPORT("Excel export", "Take the numbers into your own spreadsheets")
+/**
+ * Everything behind the paywall. Each entry is one line in the upgrade sheet.
+ *
+ * The wording is held as resource ids rather than literals so the sheet says "budgets"
+ * in the same voice as every other screen, and keeps saying it when the copy changes.
+ */
+enum class ProFeature(@get:StringRes val label: Int, @get:StringRes val blurb: Int) {
+    UNLIMITED_EVENTS(R.string.pro_unlimited_budgets, R.string.pro_unlimited_budgets_blurb),
+    TEMPLATES(R.string.pro_templates, R.string.pro_templates_blurb),
+    ANALYTICS(R.string.pro_insights, R.string.pro_insights_blurb),
+    PDF_EXPORT(R.string.pro_pdf_export, R.string.pro_pdf_export_blurb),
+    EXCEL_EXPORT(R.string.pro_excel_export, R.string.pro_excel_export_blurb)
 }
 
 object FreePlanLimits {

@@ -71,7 +71,7 @@ class EventViewModel(
 
     val plan: StateFlow<Plan> = entitlements.plan
 
-    /** Drives the "1 event left" hint on Home. Enforcement uses a fresh count, not this. */
+    /** Drives the "1 free budget left" hint on Home. Enforcement uses a fresh count, not this. */
     val remainingFreeEvents: StateFlow<Int> = combine(events, plan) { list, currentPlan ->
         PlanRules.remainingFreeEvents(currentPlan, list.size)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FREE_EVENTS_UNKNOWN)
@@ -164,7 +164,7 @@ class EventViewModel(
             // A write can fail on a full disk. Uncaught it would take the whole app down
             // from a coroutine, which is a poor way to learn storage ran out.
             runCatching { repository.addEvent(event, lines) }
-                .onFailure { _message.value = UiMessage.Error("Could not save the event: ${it.message}") }
+                .onFailure { _message.value = UiMessage.Error("Could not save the budget: ${it.message}") }
         }
     }
 
@@ -179,7 +179,7 @@ class EventViewModel(
         viewModelScope.launch {
             val (start, end) = normalizePeriod(event.startDate, event.endDate)
             runCatching { repository.updateEvent(event.copy(startDate = start, endDate = end)) }
-                .onFailure { _message.value = UiMessage.Error("Could not save the event: ${it.message}") }
+                .onFailure { _message.value = UiMessage.Error("Could not save the budget: ${it.message}") }
         }
     }
 
@@ -222,7 +222,7 @@ class EventViewModel(
             val existing = repository.budgetLinesFor(eventId)
             val edit = BudgetPlanEditor.edit(eventId, rows, existing)
             runCatching { repository.savePlan(edit.lines, edit.removedIds) }
-                .onFailure { _message.value = UiMessage.Error("Could not save the plan: ${it.message}") }
+                .onFailure { _message.value = UiMessage.Error("Could not save the categories: ${it.message}") }
         }
     }
 

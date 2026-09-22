@@ -4,6 +4,7 @@ import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.domain.template.CustomPlan
 import com.el.sapiospend.util.formatAmountInput
+import com.el.sapiospend.util.parseAmount
 
 /** What one save of the plan editor asks the database to do. */
 data class PlanEdit(
@@ -56,7 +57,7 @@ object BudgetPlanEditor {
     ): PlanEdit {
         val kept = rows.mapNotNull { row ->
             val name = row.name.trim()
-            val amount = row.amount.toDoubleOrNull() ?: 0.0
+            val amount = row.amount.parseAmount() ?: 0.0
             if (name.isEmpty() || amount <= 0) return@mapNotNull null
             BudgetLineEntity(
                 id = row.id,
@@ -76,7 +77,7 @@ object BudgetPlanEditor {
     /** What the rows currently add up to — the figure checked against the total budget. */
     fun plannedTotal(rows: List<CustomCategoryInput>): Double =
         rows.sumOf { row ->
-            if (row.name.isBlank()) 0.0 else (row.amount.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)
+            if (row.name.isBlank()) 0.0 else (row.amount.parseAmount() ?: 0.0).coerceAtLeast(0.0)
         }
 
     /**

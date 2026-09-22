@@ -16,11 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.el.sapiospend.R
 import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.ui.theme.AppColors
@@ -68,7 +70,7 @@ fun BudgetPlanScreen(
                 .background(AppColors.BG),
             contentAlignment = Alignment.Center
         ) {
-            if (event == null) Text("Event not found", color = AppColors.Secondary)
+            if (event == null) Text(stringResource(R.string.detail_not_found), color = AppColors.Secondary)
         }
         return
     }
@@ -107,12 +109,12 @@ fun BudgetPlanScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Secondary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = AppColors.Secondary)
             }
             Spacer(Modifier.width(4.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "Planned Budget",
+                    stringResource(R.string.categories_title),
                     color = AppColors.OnSurface,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
@@ -130,10 +132,11 @@ fun BudgetPlanScreen(
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    PlanStat("Budget", event.budget.formatMoney(), Color.White)
-                    PlanStat("Planned", planned.formatMoney(), Color.White)
+                    PlanStat(stringResource(R.string.label_total), event.budget.formatMoney(), Color.White)
+                    PlanStat(stringResource(R.string.label_planned), planned.formatMoney(), Color.White)
                     PlanStat(
-                        if (overAllocated) "Over by" else "Unallocated",
+                        if (overAllocated) stringResource(R.string.label_over_by)
+                        else stringResource(R.string.label_unallocated),
                         abs(unallocated).formatMoney(),
                         if (overAllocated) Color(0xFFFF6B6B) else Color(0xFF6EE7B7)
                     )
@@ -151,8 +154,8 @@ fun BudgetPlanScreen(
                     // Planning past the budget is allowed and only flagged: it is often
                     // the first honest draft of a budget, and the point of writing the
                     // plan down is to find out that it does not fit.
-                    if (overAllocated) "Your categories add up to more than the budget"
-                    else "${(allocatedFraction * 100).toInt()}% of the budget is assigned to a category",
+                    if (overAllocated) stringResource(R.string.categories_over_total)
+                    else stringResource(R.string.categories_allocated, (allocatedFraction * 100).toInt()),
                     color = if (overAllocated) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.5f),
                     fontSize = 11.sp
                 )
@@ -201,7 +204,7 @@ fun BudgetPlanScreen(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("CATEGORIES", color = AppColors.Secondary, fontSize = 11.sp, letterSpacing = 0.5.sp)
             Text(
-                "Set what you intend to spend on each. Clear a row to drop it from the plan.",
+                stringResource(R.string.categories_hint),
                 color = AppColors.Border,
                 fontSize = 12.sp
             )
@@ -281,7 +284,7 @@ fun BudgetPlanScreen(
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = AppColors.Black, contentColor = Color.White)
         ) {
-            Text("Save plan", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(stringResource(R.string.categories_save), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
         }
 
         Spacer(Modifier.height(20.dp))

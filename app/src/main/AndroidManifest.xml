@@ -6,6 +6,14 @@
          not exist to request. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Exchange rates only. The app converts perfectly well without a connection, on a
+         rate table compiled into the APK; this permission exists so those figures can be
+         refreshed instead of ageing for the life of the install. Every budget figure, and
+         every calculation over them, stays on the device — the only request the app ever
+         makes is an unauthenticated GET for a public price list, carrying no parameters,
+         no identifiers and none of the user's data. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Alarms do not survive a reboot. Without this the daily reminder tick would be
          lost the first time the phone restarts and never come back. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

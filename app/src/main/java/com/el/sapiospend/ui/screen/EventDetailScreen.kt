@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,9 +48,11 @@ import com.el.sapiospend.domain.search.ExpenseSort
 import com.el.sapiospend.domain.search.ExpenseStatusFilter
 import com.el.sapiospend.domain.search.ExpenseView
 import com.el.sapiospend.domain.template.EventTypes
+import com.el.sapiospend.R
 import com.el.sapiospend.export.ReportBuilder
 import com.el.sapiospend.ui.component.DayCalendarDialog
 import com.el.sapiospend.ui.component.ExportMenu
+import com.el.sapiospend.ui.component.OverviewStat
 import com.el.sapiospend.ui.component.PeriodCalendarDialog
 import com.el.sapiospend.ui.component.PlannedVsActualChart
 import com.el.sapiospend.ui.component.PaywallTrigger
@@ -59,6 +62,7 @@ import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.util.DateUtils
 import com.el.sapiospend.util.formatAmountInput
+import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
 import com.el.sapiospend.util.formatMoney
@@ -138,7 +142,7 @@ fun EventDetailScreen(
 
     if (event == null) {
         Box(Modifier.fillMaxSize().background(AppColors.BG), contentAlignment = Alignment.Center) {
-            Text("Event not found", color = AppColors.Secondary)
+            Text(stringResource(R.string.detail_not_found), color = AppColors.Secondary)
         }
         return
     }
@@ -147,8 +151,8 @@ fun EventDetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteEventDialog = false },
             containerColor = AppColors.Surface,
-            title = { Text("Delete Event", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
-            text = { Text("Delete \"${event.name}\" and all its expenses? This cannot be undone.", color = AppColors.Secondary) },
+            title = { Text(stringResource(R.string.detail_delete_title), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
+            text = { Text(stringResource(R.string.detail_delete_message, event.name), color = AppColors.Secondary) },
             confirmButton = {
                 TextButton(onClick = {
                     eventViewModel.deleteEvent(event)
@@ -189,7 +193,7 @@ fun EventDetailScreen(
             onDismissRequest = { contributionToDelete = null },
             containerColor = AppColors.Surface,
             title = { Text("Remove Contribution", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
-            text = { Text("Remove \"${pending.source}\" from this event's funding?", color = AppColors.Secondary) },
+            text = { Text(stringResource(R.string.detail_funding_remove, pending.source), color = AppColors.Secondary) },
             confirmButton = {
                 TextButton(onClick = {
                     eventViewModel.deleteContribution(pending)
@@ -209,7 +213,7 @@ fun EventDetailScreen(
             title = { Text("Delete Recurring Expense", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
             text = {
                 Text(
-                    "Stop recording \"${pending.title}\"? The expenses it has already created stay on the event.",
+                    stringResource(R.string.detail_recurring_stop, pending.title),
                     color = AppColors.Secondary
                 )
             },
@@ -277,11 +281,11 @@ fun EventDetailScreen(
     }
 
     if (showEditDialog) {
-        val editBudgetValue = editBudget.toDoubleOrNull() ?: 0.0
+        val editBudgetValue = editBudget.parseAmount() ?: 0.0
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             containerColor = AppColors.Surface,
-            title = { Text("Edit Event", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
+            title = { Text(stringResource(R.string.detail_edit_title), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(
                     // The dialog now carries a period row on top of three fields, which
@@ -292,7 +296,7 @@ fun EventDetailScreen(
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
-                        label = { Text("Event Name") },
+                        label = { Text(stringResource(R.string.field_name)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -301,7 +305,7 @@ fun EventDetailScreen(
                     OutlinedTextField(
                         value = editBudget,
                         onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) editBudget = v },
-                        label = { Text("Total Budget (${ActiveCurrency.value.symbol})") },
+                        label = { Text(stringResource(R.string.field_total, ActiveCurrency.value.symbol)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -318,7 +322,7 @@ fun EventDetailScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Budget Period", color = AppColors.Secondary, fontSize = 12.sp)
+                        Text(stringResource(R.string.field_period), color = AppColors.Secondary, fontSize = 12.sp)
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -335,7 +339,7 @@ fun EventDetailScreen(
                             )
                             Icon(
                                 Icons.Default.CalendarToday,
-                                contentDescription = "Change budget period",
+                                contentDescription = stringResource(R.string.detail_change_period),
                                 tint = AppColors.Secondary,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -357,7 +361,7 @@ fun EventDetailScreen(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Event Type", color = AppColors.Secondary, fontSize = 12.sp)
+                        Text(stringResource(R.string.field_type), color = AppColors.Secondary, fontSize = 12.sp)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -433,7 +437,7 @@ fun EventDetailScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Secondary)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = AppColors.Secondary)
                         }
                         Spacer(Modifier.width(4.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -475,10 +479,10 @@ fun EventDetailScreen(
                             editEnd = event.endDate
                             showEditDialog = true
                         }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit event", tint = AppColors.Secondary)
+                            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.detail_edit), tint = AppColors.Secondary)
                         }
                         IconButton(onClick = { showDeleteEventDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete event", tint = AppColors.Secondary)
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.detail_delete), tint = AppColors.Secondary)
                         }
                     }
                 }
@@ -492,17 +496,18 @@ fun EventDetailScreen(
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Budget Overview", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
+                        Text(stringResource(R.string.label_overview), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            BudgetStat("Budget", budget.formatMoney(), Color.White)
-                            BudgetStat("Spent", totalSpent.formatMoney(), Color(0xFFFF6B6B))
-                            BudgetStat(
-                                "Remaining",
+                            OverviewStat(stringResource(R.string.label_total), budget.formatMoney(), Color.White, Modifier.weight(1f))
+                            OverviewStat(stringResource(R.string.label_spent), totalSpent.formatMoney(), Color(0xFFFF6B6B), Modifier.weight(1f))
+                            OverviewStat(
+                                stringResource(R.string.label_remaining),
                                 remaining.formatMoney(),
-                                if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
+                                if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B),
+                                Modifier.weight(1f)
                             )
                         }
                         LinearProgressIndicator(
@@ -531,14 +536,20 @@ fun EventDetailScreen(
                         if (payments != null && payments.outstanding > 0) {
                             Row(
                                 Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                BudgetStat("Paid", payments.paid.formatMoney(), Color.White)
-                                BudgetStat("Still owed", payments.outstanding.formatMoney(), Color(0xFFFBBF24))
-                                BudgetStat(
-                                    "Overdue",
+                                OverviewStat(stringResource(R.string.label_paid), payments.paid.formatMoney(), Color.White, Modifier.weight(1f))
+                                OverviewStat(
+                                    stringResource(R.string.label_still_owed),
+                                    payments.outstanding.formatMoney(),
+                                    Color(0xFFFBBF24),
+                                    Modifier.weight(1f)
+                                )
+                                OverviewStat(
+                                    stringResource(R.string.label_overdue),
                                     if (payments.overdueCount > 0) payments.overdueAmount.formatMoney() else "None",
-                                    if (payments.overdueCount > 0) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.6f)
+                                    if (payments.overdueCount > 0) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.6f),
+                                    Modifier.weight(1f)
                                 )
                             }
                             payments.nextDueDate?.let { due ->
@@ -605,14 +616,16 @@ fun EventDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                if (hasPlan) "Planned vs Actual" else "By Category",
+                                if (hasPlan) stringResource(R.string.categories_planned_vs_actual)
+                                else stringResource(R.string.categories_title),
                                 color = AppColors.Secondary,
                                 fontSize = 12.sp,
                                 letterSpacing = 0.5.sp
                             )
                             TextButton(onClick = onEditPlan, contentPadding = PaddingValues(horizontal = 8.dp)) {
                                 Text(
-                                    if (hasPlan) "Edit plan" else "Set a plan",
+                                    if (hasPlan) stringResource(R.string.categories_edit)
+                                    else stringResource(R.string.categories_set),
                                     color = AppColors.Black,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
@@ -625,7 +638,7 @@ fun EventDetailScreen(
                             // offer here is the plan, not an empty chart — a budget with
                             // no breakdown behind it can only ever report a total.
                             Text(
-                                "Set what you intend to spend on each category, and every figure on this screen gets something to be measured against.",
+                                stringResource(R.string.categories_empty_prompt),
                                 color = AppColors.Secondary,
                                 fontSize = 13.sp
                             )
@@ -667,10 +680,10 @@ fun EventDetailScreen(
                         } else {
                             val funding = analytics?.funding
                             Row(Modifier.fillMaxWidth()) {
-                                MiniFigure("Received", (funding?.received ?: 0.0).formatMoney(), Modifier.weight(1f), AppColors.Success)
-                                MiniFigure("Pledged", (funding?.pledged ?: 0.0).formatMoney(), Modifier.weight(1f))
+                                MiniFigure(stringResource(R.string.label_received), (funding?.received ?: 0.0).formatMoney(), Modifier.weight(1f), AppColors.Success)
+                                MiniFigure(stringResource(R.string.label_pledged), (funding?.pledged ?: 0.0).formatMoney(), Modifier.weight(1f))
                                 MiniFigure(
-                                    "Cash left",
+                                    stringResource(R.string.label_cash_left),
                                     (analytics?.cashPosition ?: 0.0).formatMoney(),
                                     Modifier.weight(1f),
                                     // Cash received less cash paid out. Negative means
@@ -723,7 +736,7 @@ fun EventDetailScreen(
                                 val shortfall = a.funding.shortfall(a.budget)
                                 if (shortfall > 0) {
                                     Text(
-                                        "${shortfall.formatMoney()} of the budget is still unfunded",
+                                        stringResource(R.string.detail_unfunded, shortfall.formatMoney()),
                                         color = AppColors.Secondary,
                                         fontSize = 11.sp
                                     )
@@ -1098,14 +1111,6 @@ fun EventDetailScreen(
     }
 }
 
-@Composable
-private fun BudgetStat(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
-    }
-}
-
 /** A compact filter chip. Smaller than the form's, because these come a dozen to a row. */
 @Composable
 private fun SmallChip(
@@ -1193,7 +1198,7 @@ private fun AddContributionDialog(
     var source by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var received by remember { mutableStateOf(true) }
-    val amountValue = amount.toDoubleOrNull() ?: 0.0
+    val amountValue = amount.parseAmount() ?: 0.0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1278,7 +1283,7 @@ private fun AddRecurringDialog(
     var showPicker by remember { mutableStateOf(false) }
     val options = remember(categories) { (categories + listOf("Others")).filter { it.isNotBlank() }.distinct() }
     var category by remember(options) { mutableStateOf(options.first()) }
-    val amountValue = amount.toDoubleOrNull() ?: 0.0
+    val amountValue = amount.parseAmount() ?: 0.0
 
     if (showPicker) {
         DayCalendarDialog(
@@ -1376,7 +1381,7 @@ private fun AddRecurringDialog(
                 }
 
                 Text(
-                    eventEnd?.let { "Stops when the event ends on ${it.formatDate()}." }
+                    eventEnd?.let { stringResource(R.string.detail_recurring_ends, it.formatDate()) }
                         ?: "Runs until you pause it.",
                     color = AppColors.Border,
                     fontSize = 11.sp

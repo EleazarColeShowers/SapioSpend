@@ -1,6 +1,7 @@
 package com.el.sapiospend.ui.screen
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.el.sapiospend.R
 import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
@@ -43,6 +46,7 @@ import com.el.sapiospend.ui.component.ReceiptImage
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.util.DateUtils
 import com.el.sapiospend.util.formatAmountInput
+import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.settings.ActiveCurrency
@@ -197,6 +201,10 @@ fun ExpenseFormScreen(
         onBack()
     }
 
+    // The system back button and gesture take the same exit as the arrow, so leaving that
+    // way still clears the receipts this screen wrote rather than stranding them on disk.
+    BackHandler(onBack = ::leave)
+
     if (showDatePicker) {
         DayCalendarDialog(
             initialDay = date,
@@ -257,8 +265,11 @@ fun ExpenseFormScreen(
         unfocusedContainerColor = AppColors.Surface
     )
 
-    val amountValue = amount.toDoubleOrNull() ?: 0.0
-    val depositValue = deposit.toDoubleOrNull() ?: 0.0
+    // Parsed straight into the base currency, so every comparison below — and
+    // everything that reaches the database — is in the same unit as the stored data,
+    // whichever currency the user happens to be typing in.
+    val amountValue = amount.parseAmount() ?: 0.0
+    val depositValue = deposit.parseAmount() ?: 0.0
     val depositTooLarge = paymentStatus == PaymentStatus.PARTIAL && depositValue > amountValue
 
     Column(
@@ -533,7 +544,7 @@ fun ExpenseFormScreen(
                 // asking a question the user has already answered.
                 if (isEditing && events.size > 1) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Event", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                        Text(stringResource(R.string.expense_budget_label), color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -560,7 +571,7 @@ fun ExpenseFormScreen(
                         }
                         if (targetEventId != eventId) {
                             Text(
-                                "Moving this expense takes its amount off the old event's total and onto this one.",
+                                stringResource(R.string.expense_move_note),
                                 color = AppColors.Secondary,
                                 fontSize = 11.sp
                             )

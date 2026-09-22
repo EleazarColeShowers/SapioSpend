@@ -7,26 +7,30 @@ import org.junit.Test
 
 class CurrencyTest {
 
+    /**
+     * Formatting only: [from] is passed as the same currency so no rate is applied, which
+     * is what isolates the grouping and the symbol from the conversion.
+     */
     @Test
     fun `amounts are grouped and carry the currency symbol`() {
-        assertEquals("₦1,250,000", 1_250_000.0.formatMoney(AppCurrency.NGN))
-        assertEquals("$1,250,000", 1_250_000.0.formatMoney(AppCurrency.USD))
-        assertEquals("£1,250,000", 1_250_000.0.formatMoney(AppCurrency.GBP))
-        assertEquals("KSh1,250,000", 1_250_000.0.formatMoney(AppCurrency.KES))
+        assertEquals("₦1,250,000", 1_250_000.0.formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
+        assertEquals("$1,250,000", 1_250_000.0.formatMoney(AppCurrency.USD, from = AppCurrency.USD))
+        assertEquals("£1,250,000", 1_250_000.0.formatMoney(AppCurrency.GBP, from = AppCurrency.GBP))
+        assertEquals("KSh1,250,000", 1_250_000.0.formatMoney(AppCurrency.KES, from = AppCurrency.KES))
     }
 
     /** Kobo are shown when present and suppressed when the figure is whole. */
     @Test
     fun `fractions are kept only when they exist`() {
-        assertEquals("₦1,500", 1500.0.formatMoney(AppCurrency.NGN))
-        assertEquals("₦1,500.5", 1500.50.formatMoney(AppCurrency.NGN))
-        assertEquals("₦1,500.55", 1500.55.formatMoney(AppCurrency.NGN))
+        assertEquals("₦1,500", 1500.0.formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
+        assertEquals("₦1,500.5", 1500.50.formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
+        assertEquals("₦1,500.55", 1500.55.formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
     }
 
     @Test
     fun `zero and negative amounts format`() {
-        assertEquals("₦0", 0.0.formatMoney(AppCurrency.NGN))
-        assertEquals("₦-2,000", (-2000.0).formatMoney(AppCurrency.NGN))
+        assertEquals("₦0", 0.0.formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
+        assertEquals("₦-2,000", (-2000.0).formatMoney(AppCurrency.NGN, from = AppCurrency.NGN))
     }
 
     /**

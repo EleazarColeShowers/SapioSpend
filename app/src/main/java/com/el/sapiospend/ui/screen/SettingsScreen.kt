@@ -7,21 +7,32 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.el.sapiospend.R
 import com.el.sapiospend.domain.notify.CheckInCadence
 import com.el.sapiospend.domain.notify.NotificationPrefs
 import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.FxRates
 import com.el.sapiospend.ui.theme.AppColors
+import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatMoney
+import kotlinx.coroutines.launch
 
 /** A figure with enough digits to show what the grouping and symbol actually look like. */
 private const val PREVIEW_AMOUNT = 1_250_000.0
@@ -30,12 +41,16 @@ private const val PREVIEW_AMOUNT = 1_250_000.0
 fun SettingsScreen(
     currency: AppCurrency,
     onCurrencyChange: (AppCurrency) -> Unit,
+    /** The currency the stored figures are in — what the preview converts *from*. */
+    baseCurrency: AppCurrency = currency,
+    rates: FxRates = FxRates.BUNDLED,
+    /** Returns whether anything newer actually arrived. */
+    onRefreshRates: suspend () -> Boolean = { false },
     notifications: NotificationPrefs,
     onNotificationsChange: (NotificationPrefs) -> Unit,
     /** False when the user has never been asked, or has said no. */
     notificationsAllowed: Boolean = true,
-    onRequestNotificationPermission: () -> Unit = {},
-    onBack: () -> Unit = {}
+    onRequestNotificationPermission: () -> Unit = {}
 ) {
     /**
      * Switching a notification on is the moment to ask for permission — the user has just
@@ -46,6 +61,34 @@ fun SettingsScreen(
         onNotificationsChange(value)
         if (value.anyEnabled && !notificationsAllowed) onRequestNotificationPermission()
     }
+
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+
+    /** Null while nothing has been tried this visit; cleared a few seconds after it is shown. */
+    var refreshResult by remember { mutableStateOf<String?>(null) }
+
+    // The result line is a confirmation, not a status: leaving "Rates updated" on screen
+    // for the rest of the session would have it still claiming a refresh just happened
+    // ten minutes later.
+    LaunchedEffect(refreshResult) {
+        if (refreshResult != null) {
+            kotlinx.coroutines.delay(4000)
+            refreshResult = null
+        }
+    }
+
+    fun refresh() {
+        if (refreshing) return
+        refreshing = true
+        scope.launch {
+            val updated = onRefreshRates()
+            refreshing = false
+            refreshResult = if (updated) "Rates updated." else "Couldn't reach the rate service — still using the rates below."
+        }
+    }
+
+    val converting = currency != baseCurrency
 
     Box(
         Modifier
@@ -60,17 +103,10 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = 24.dp, bottom = 40.dp)
         ) {
             item {
+                // No back arrow: this is a tab, and the bar below is the way out of it.
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = AppColors.Secondary
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
                     Text(
-                        "Settings",
+                        stringResource(R.string.nav_settings),
                         color = AppColors.OnSurface,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -87,11 +123,13 @@ fun SettingsScreen(
                         fontSize = 11.sp,
                         letterSpacing = 0.5.sp
                     )
-                    // Said plainly and up front, because the alternative reading —
-                    // that switching currency converts the money — would have somebody
-                    // believe their ₦2m wedding budget just became $2m.
+                    // Both halves said plainly, because either one alone is the
+                    // misunderstanding: that nothing converts, or that the figures
+                    // themselves were rewritten and the originals are gone.
                     Text(
-                        "Changes how amounts are labelled. Your figures stay exactly as you entered them — nothing is converted.",
+                        "Amounts are converted into the currency you pick. What you recorded is " +
+                            "kept in ${baseCurrency.displayName} and never changed — switch back and " +
+                            "your figures are exactly as you typed them.",
                         color = AppColors.Secondary,
                         fontSize = 12.sp
                     )
@@ -115,8 +153,18 @@ fun SettingsScreen(
                             fontSize = 12.sp,
                             letterSpacing = 0.5.sp
                         )
+                        // Shown as the sum it is rather than as a lone figure: a
+                        // converted amount with nothing to convert *from* beside it is
+                        // the thing nobody can sanity-check.
+                        if (converting) {
+                            Text(
+                                PREVIEW_AMOUNT.formatMoney(baseCurrency, from = baseCurrency, rates = rates),
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 14.sp
+                            )
+                        }
                         Text(
-                            PREVIEW_AMOUNT.formatMoney(currency),
+                            PREVIEW_AMOUNT.formatMoney(currency, from = baseCurrency, rates = rates),
                             color = Color.White,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
@@ -124,6 +172,18 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            item {
+                RateCard(
+                    base = baseCurrency,
+                    display = currency,
+                    rates = rates,
+                    converting = converting,
+                    refreshing = refreshing,
+                    result = refreshResult,
+                    onRefresh = ::refresh
+                )
             }
 
             items(AppCurrency.entries, key = { it.code }) { option ->
@@ -169,7 +229,15 @@ fun SettingsScreen(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
-                            Text(option.code, color = AppColors.Secondary, fontSize = 12.sp)
+                            // The rate this row would convert at, so the choice is made
+                            // with the number in front of you rather than after tapping
+                            // it and reading your budget back differently.
+                            Text(
+                                if (option == baseCurrency) "${option.code} · what your figures are recorded in"
+                                else "${option.code} · ${rates.unitRate(option, baseCurrency).formatMoney(baseCurrency, from = baseCurrency, rates = rates)} per ${option.symbol}1",
+                                color = AppColors.Secondary,
+                                fontSize = 12.sp
+                            )
                         }
 
                         if (selected) {
@@ -217,8 +285,8 @@ fun SettingsScreen(
 
             item {
                 ToggleRow(
-                    title = "Budget alerts",
-                    subtitle = "When an event passes 80% of its budget, and again when it goes over",
+                    title = stringResource(R.string.settings_alerts_title),
+                    subtitle = stringResource(R.string.settings_alerts_subtitle),
                     checked = notifications.budgetAlerts,
                     onCheckedChange = { update(notifications.copy(budgetAlerts = it)) }
                 )
@@ -226,8 +294,8 @@ fun SettingsScreen(
 
             item {
                 ToggleRow(
-                    title = "Event reminders",
-                    subtitle = "Before a budget period ends, and on its closing day",
+                    title = stringResource(R.string.settings_reminders_title),
+                    subtitle = stringResource(R.string.settings_reminders_subtitle),
                     checked = notifications.eventReminders,
                     onCheckedChange = { update(notifications.copy(eventReminders = it)) }
                 )
@@ -271,6 +339,116 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Where the rates came from, how old they are, and a way to ask for newer ones.
+ *
+ * Shown whether or not anything is being converted, because "you are reading in the
+ * currency you recorded in, so no rate is involved" is itself the answer to the question
+ * this card exists to answer, and hiding the card would leave it unanswered.
+ *
+ * The refresh is the only place in the app that touches the network, and it is a button
+ * rather than something that happens silently while the screen is open: a user who is on
+ * a metered connection or who would rather the app stayed off the internet should not
+ * have to guess whether opening Settings costs them anything.
+ */
+@Composable
+private fun RateCard(
+    base: AppCurrency,
+    display: AppCurrency,
+    rates: FxRates,
+    converting: Boolean,
+    refreshing: Boolean,
+    result: String?,
+    onRefresh: () -> Unit
+) {
+    val stale = rates.isStale()
+    Card(
+        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        if (converting) {
+                            "1 ${display.code} = ${rates.unitRate(display, base).formatMoney(base, from = base, rates = rates)}"
+                        } else {
+                            "No conversion — you're reading in the currency you record in"
+                        },
+                        color = AppColors.OnSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        buildString {
+                            append("Rates from ${rates.asOf.formatDate()}")
+                            // Named rather than implied: "built in" tells a user with no
+                            // signal that the app is working as designed, not failing.
+                            if (rates.source == FxRates.Source.BUNDLED) append(" · built in")
+                        },
+                        color = if (stale) AppColors.Warning else AppColors.Secondary,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // Disabled while in flight rather than hidden, so the row does not
+                // reflow under the thumb that just tapped it.
+                IconButton(onClick = onRefresh, enabled = !refreshing) {
+                    if (refreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = AppColors.Secondary
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Update exchange rates",
+                            tint = AppColors.Secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Only worth saying once the figures could actually be off by something a
+            // person would notice; before that it is a warning about nothing.
+            if (stale && converting) {
+                Text(
+                    "These rates are ${rates.ageInDays()} days old. Converted amounts may be out by a " +
+                        "few percent — tap refresh when you're online.",
+                    color = AppColors.Warning,
+                    fontSize = 12.sp
+                )
+            }
+
+            result?.let {
+                Text(it, color = AppColors.Secondary, fontSize = 12.sp)
+            }
+
+            Text(
+                "Rates are stored on your phone and used offline. Refreshing is the only time " +
+                    "Sapio Spend goes online, and it only asks for a public list of rates — none " +
+                    "of your budget figures ever leave the device.",
+                color = AppColors.Secondary,
+                fontSize = 11.sp
+            )
         }
     }
 }

@@ -22,38 +22,117 @@ import kotlinx.coroutines.flow.asStateFlow
 class SettingsRepository(private val prefs: SharedPreferences) {
 
     private val _currency = MutableStateFlow(readCurrency())
+
+    /** The currency amounts are *shown* in. */
     val currency: StateFlow<AppCurrency> = _currency.asStateFlow()
+
+    private val _baseCurrency = MutableStateFlow(readBaseCurrency())
+
+    /**
+     * The currency amounts are *stored* in — what the figures in the database mean.
+     *
+     * Kept apart from [currency] so that switching what you are reading in cannot touch
+     * what you recorded. Everything the user typed stays exactly as they typed it, in the
+     * currency they typed it in, and the display currency is applied on the way out.
+     *
+     * It only moves in the one case where moving it is free: see [setCurrency].
+     */
+    val baseCurrency: StateFlow<AppCurrency> = _baseCurrency.asStateFlow()
 
     /**
      * Changes the currency the app displays in.
      *
-     * Note that this re-labels existing amounts rather than converting them: a ₦50,000
-     * budget switched to USD reads as $50,000, not $32. That is the honest behaviour for
-     * an offline app — a conversion would need live FX rates, and a stale rate silently
-     * rewriting somebody's recorded spend is far worse than a relabel they asked for.
+     * Amounts are converted, not relabelled: a ₦50,000 budget read in USD is about $32,
+     * worked out from [rates]. The stored figure does not change — switching back to
+     * naira shows ₦50,000 again, to the kobo, because nothing was ever rewritten.
+     *
+     * [hasData] is the one lever on the base currency, and it exists because a fresh
+     * install has no reason to record in naira. With nothing saved yet there is nothing
+     * to convert, so adopting the new currency as the base is exact and free, and it
+     * spares a user who has never seen a naira an app that stores their rent in one and
+     * re-converts it at a different rate every time the feed moves. The moment there is
+     * data, the base is frozen: re-denominating somebody's history behind a currency
+     * picker is precisely the silent rewrite this design exists to avoid.
      */
-    fun setCurrency(currency: AppCurrency) {
-        prefs.edit().putString(KEY_CURRENCY, currency.code).apply()
+    fun setCurrency(currency: AppCurrency, hasData: Boolean = true) {
+        val editor = prefs.edit().putString(KEY_CURRENCY, currency.code)
+        if (!hasData) editor.putString(KEY_BASE_CURRENCY, currency.code)
+        editor.apply()
         _currency.value = currency
+        if (!hasData) _baseCurrency.value = currency
     }
 
     private fun readCurrency(): AppCurrency =
         AppCurrency.fromCode(prefs.getString(KEY_CURRENCY, null))
 
-    // --- Notifications -------------------------------------------------------------
-    // Exposed as one value rather than a flag per setting, because everything that reads
-    // them — the scheduler, the digest, the alert publisher — needs the whole picture to
-    // decide anything, and four separate flows would have them acting on half of it.
+    /**
+     * An install from before this setting existed has figures in naira, because that is
+     * all the app could record then — so a missing value must read as the default and
+     * not as whatever the display currency happens to be now.
+     */
+    private fun readBaseCurrency(): AppCurrency =
+        AppCurrency.fromCode(prefs.getString(KEY_BASE_CURRENCY, null))
 
-    private val _notifications = MutableStateFlow(readNotifications())
-    val notifications: StateFlow<NotificationPrefs> = _notifications.asStateFlow()
+    // --- Exchange rates ------------------------------------------------------------
+
+    private val _rates = MutableStateFlow(readRates())
+
+    /** The table conversions are done with. Never empty: it starts bundled. */
+    val rates: StateFlow<FxRates> = _rates.asStateFlow()
 
     /**
-     * Writes the whole preference block at once.
-     *
-     * Callers hand back a copy of the current value with one field changed, so a setting
-     * this app has not shipped yet cannot be silently reset by an older screen.
+     * The cached table laid over the bundled one, so a cache written by an older build
+     * — or by a feed that has since dropped a currency — cannot leave a currency
+     * unpriced. [FxRates.BUNDLED] is the floor, not the fallback.
      */
+    private fun readRates(): FxRates =
+        FxRates.BUNDLED.mergedWith(FxRates.deserialize(prefs.getString(KEY_RATES, null)))
+
+    /**
+     * Replaces the cached rates, if the new ones are actually newer.
+     *
+     * The date check is what stops a feed that is serving yesterday from walking the
+     * table backwards after a successful refresh from a fresher source.
+     */
+    fun setRates(fetched: FxRates) {
+        if (fetched.asOf < _rates.value.asOf) return
+        val merged = FxRates.BUNDLED.mergedWith(fetched)
+        prefs.edit().putString(KEY_RATES, merged.serialize()).apply()
+        _rates.value = merged
+    }
+
+    /**
+     * Pulls fresh rates if there is a network, and shrugs if there is not.
+     *
+     * Returns whether anything was updated, for a Settings screen that wants to say so.
+     * Callers on the startup path ignore it: the app is fully usable on the rates it
+     * already has, which is the entire point of shipping a bundled table.
+     */
+    suspend fun refreshRates(): Boolean =
+        FxRateFetcher.fetch().map { setRates(it); true }.getOrDefault(false)
+
+    /**
+     * A background refresh on launch, skipped when the rates are already current.
+     *
+     * Rate feeds publish once a day, so asking again in the same day is a request that
+     * cannot return anything new — it spends the user's battery and data to be told what
+     * the app already knows. The check is against the rates' own publication date rather
+     * than a "last attempted" stamp, which means an offline stretch keeps retrying (the
+     * rates stay old, so a refresh stays due) instead of backing off exactly when it
+     * matters most.
+     */
+    suspend fun refreshRatesIfDue(now: Long = System.currentTimeMillis()): Boolean =
+        if (_rates.value.ageInDays(now) < 1L) false else refreshRates()
+
+    /**
+     * The three settings needed to render an amount, read together.
+     *
+     * For the widget and the notification tick, which run outside the app's process and
+     * so cannot use the [ActiveCurrency]/[ActiveBase]/[ActiveRates] globals.
+     */
+    fun moneyStyle(): MoneyStyle = MoneyStyle(_currency.value, _baseCurrency.value, _rates.value)
+    private val _notifications = MutableStateFlow(readNotifications())
+    val notifications: StateFlow<NotificationPrefs> = _notifications.asStateFlow()
     fun setNotifications(value: NotificationPrefs) {
         prefs.edit()
             .putBoolean(KEY_EVENT_REMINDERS, value.eventReminders)
@@ -71,8 +150,7 @@ class SettingsRepository(private val prefs: SharedPreferences) {
             eventReminders = prefs.getBoolean(KEY_EVENT_REMINDERS, defaults.eventReminders),
             reminderLeadDays = prefs.getInt(KEY_LEAD_DAYS, defaults.reminderLeadDays),
             budgetAlerts = prefs.getBoolean(KEY_BUDGET_ALERTS, defaults.budgetAlerts),
-            // Stored by name, never by ordinal, so reordering the enum cannot turn a
-            // user's weekly nudge into a daily one.
+
             checkIn = prefs.getString(KEY_CHECK_IN, null)
                 ?.let { name -> CheckInCadence.entries.firstOrNull { it.name == name } }
                 ?: defaults.checkIn,
@@ -83,6 +161,8 @@ class SettingsRepository(private val prefs: SharedPreferences) {
     companion object {
         private const val PREFS_NAME = "sapio_settings"
         private const val KEY_CURRENCY = "currency"
+        private const val KEY_BASE_CURRENCY = "base_currency"
+        private const val KEY_RATES = "fx_rates"
         private const val KEY_EVENT_REMINDERS = "notify_event_reminders"
         private const val KEY_LEAD_DAYS = "notify_lead_days"
         private const val KEY_BUDGET_ALERTS = "notify_budget_alerts"

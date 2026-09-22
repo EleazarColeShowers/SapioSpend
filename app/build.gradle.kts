@@ -22,8 +22,8 @@ android {
         applicationId = "com.el.sapiospend"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.00003"
+        versionCode = 8
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,6 +1,11 @@
 package com.el.sapiospend.navigation
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -8,15 +13,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
 import com.el.sapiospend.ui.component.PaywallSheet
+import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.settings.SettingsRepository
 import com.el.sapiospend.ui.component.PaywallTrigger
 import com.el.sapiospend.ui.screen.AddEventScreen
@@ -38,6 +46,8 @@ fun AppNavGraph(
     eventViewModel: EventViewModel,
     exportViewModel: ExportViewModel,
     settingsRepository: SettingsRepository,
+    /** Hoisted so the Scaffold can keep the snackbar clear of the bottom bar. */
+    snackbarHostState: SnackbarHostState,
     /** Event a tapped notification wants opened, or null on an ordinary launch. */
     openEventId: String? = null,
     onEventOpened: () -> Unit = {},
@@ -117,162 +127,200 @@ fun AppNavGraph(
         }
     }
 
-    NavHost(navController = navController, startDestination = Routes.Home.route) {
+    // The bar belongs to the three top-level places only. A form or a detail screen is
+    // one task the user is in the middle of, and a tab strip under it is an invitation to
+    // abandon it halfway.
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val currentTab = BottomTab.forRoute(currentRoute)
 
-        composable(Routes.Home.route) {
-            HomeScreen(
-                onAddEventClick = { navController.navigate(Routes.AddEvent.route) },
-                onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
-                onExpenseClick = { expenseId -> navController.navigate(Routes.EditExpense.createRoute(expenseId)) },
-                onAnalyticsClick = {
-                    if (proUnlocked) navController.navigate(Routes.Analytics.route)
-                    else paywallTrigger = PaywallTrigger.ANALYTICS
-                },
-                onSettingsClick = { navController.navigate(Routes.Settings.route) },
-                onRequirePro = { trigger -> paywallTrigger = trigger },
-                eventViewModel = eventViewModel,
-                exportViewModel = exportViewModel
-            )
-        }
-
-        composable(Routes.AddEvent.route) {
-            AddEventScreen(
-                proUnlocked = proUnlocked,
-                onBack = { navController.popBackStack() },
-                onRequirePro = { paywallTrigger = PaywallTrigger.TEMPLATES },
-                onSaveEvent = { input ->
-                    eventViewModel.addEvent(
-                        name = input.name,
-                        budget = input.budget,
-                        eventType = input.eventType,
-                        template = input.template,
-                        customLines = input.customLines,
-                        startDate = input.startDate,
-                        endDate = input.endDate,
-                        guestCount = input.guestCount
-                    )
-                    navController.popBackStack()
+    Scaffold(
+        containerColor = AppColors.BG,
+        // The activity already applies the system bar padding, so the Scaffold adds none.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (currentTab != null) {
+                AppBottomBar(current = currentTab) { tab ->
+                    if (tab == currentTab) return@AppBottomBar
+                    if (tab == BottomTab.INSIGHTS && !proUnlocked) {
+                        paywallTrigger = PaywallTrigger.ANALYTICS
+                        return@AppBottomBar
+                    }
+                    // Standard tab behaviour: one entry per tab at most, and back from any
+                    // of them lands on Budgets rather than retracing every tap.
+                    navController.navigate(tab.route) {
+                        popUpTo(Routes.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
-            )
+            }
         }
+    ) { innerPadding ->
 
-        composable(Routes.Analytics.route) {
-            AnalyticsScreen(
-                onBack = { navController.popBackStack() },
-                onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
-                eventViewModel = eventViewModel
-            )
-        }
+        NavHost(
+            navController = navController,
+            startDestination = Routes.Home.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
 
-        composable(Routes.Settings.route) {
-            val currency by settingsRepository.currency.collectAsState()
-            val notifications by settingsRepository.notifications.collectAsState()
-            SettingsScreen(
-                currency = currency,
-                onCurrencyChange = settingsRepository::setCurrency,
-                notifications = notifications,
-                onNotificationsChange = settingsRepository::setNotifications,
-                notificationsAllowed = notificationsAllowed,
-                onRequestNotificationPermission = onRequestNotificationPermission,
-                onBack = { navController.popBackStack() }
-            )
-        }
+            composable(Routes.Home.route) {
+                HomeScreen(
+                    onAddEventClick = { navController.navigate(Routes.AddEvent.route) },
+                    onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
+                    onExpenseClick = { expenseId -> navController.navigate(Routes.EditExpense.createRoute(expenseId)) },
+                    onRequirePro = { trigger -> paywallTrigger = trigger },
+                    eventViewModel = eventViewModel,
+                    exportViewModel = exportViewModel
+                )
+            }
 
-        composable(
-            route = Routes.EventDetail.route,
-            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
-            EventDetailScreen(
-                eventId = eventId,
-                onBack = { navController.popBackStack() },
-                onAddExpense = { navController.navigate(Routes.AddExpense.createRoute(eventId)) },
-                onEditExpense = { expenseId -> navController.navigate(Routes.EditExpense.createRoute(expenseId)) },
-                onEditPlan = { navController.navigate(Routes.BudgetPlan.createRoute(eventId)) },
-                onRequirePro = { trigger -> paywallTrigger = trigger },
-                eventViewModel = eventViewModel,
-                exportViewModel = exportViewModel
-            )
-        }
+            composable(Routes.AddEvent.route) {
+                AddEventScreen(
+                    proUnlocked = proUnlocked,
+                    onBack = { navController.popBackStack() },
+                    onRequirePro = { paywallTrigger = PaywallTrigger.TEMPLATES },
+                    onSaveEvent = { input ->
+                        eventViewModel.addEvent(
+                            name = input.name,
+                            budget = input.budget,
+                            eventType = input.eventType,
+                            template = input.template,
+                            customLines = input.customLines,
+                            startDate = input.startDate,
+                            endDate = input.endDate,
+                            guestCount = input.guestCount
+                        )
+                        navController.popBackStack()
+                    }
+                )
+            }
 
-        composable(
-            route = Routes.BudgetPlan.route,
-            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
-            BudgetPlanScreen(
-                eventId = eventId,
-                onBack = { navController.popBackStack() },
-                eventViewModel = eventViewModel
-            )
-        }
+            composable(Routes.Analytics.route) {
+                AnalyticsScreen(
+                    onEventClick = { eventId -> navController.navigate(Routes.EventDetail.createRoute(eventId)) },
+                    eventViewModel = eventViewModel
+                )
+            }
 
-        composable(
-            route = Routes.AddExpense.route,
-            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
-            val budgetLines by eventViewModel.budgetLines.collectAsState()
-            ExpenseFormScreen(
-                eventId = eventId,
-                budgetLines = budgetLines,
-                onBack = { navController.popBackStack() },
-                onSave = { result ->
-                    eventViewModel.addExpense(
-                        eventId = result.eventId,
-                        title = result.title,
-                        category = result.category,
-                        amount = result.amount,
-                        notes = result.notes,
-                        date = result.date,
-                        vendor = result.vendor,
-                        amountPaid = result.amountPaid,
-                        dueDate = result.dueDate,
-                        receiptPath = result.receiptPath
-                    )
-                    navController.popBackStack()
-                }
-            )
-        }
+            composable(Routes.Settings.route) {
+                val currency by settingsRepository.currency.collectAsState()
+                val baseCurrency by settingsRepository.baseCurrency.collectAsState()
+                val rates by settingsRepository.rates.collectAsState()
+                val notifications by settingsRepository.notifications.collectAsState()
+                SettingsScreen(
+                    currency = currency,
+                    // With no events saved there is nothing to convert, so the chosen
+                    // currency becomes the one the app records in as well — which is how
+                    // a user who has never held a naira avoids having their figures
+                    // stored in one. See SettingsRepository.setCurrency.
+                    onCurrencyChange = { settingsRepository.setCurrency(it, hasData = events.isNotEmpty()) },
+                    baseCurrency = baseCurrency,
+                    rates = rates,
+                    onRefreshRates = settingsRepository::refreshRates,
+                    notifications = notifications,
+                    onNotificationsChange = settingsRepository::setNotifications,
+                    notificationsAllowed = notificationsAllowed,
+                    onRequestNotificationPermission = onRequestNotificationPermission
+                )
+            }
 
-        composable(
-            route = Routes.EditExpense.route,
-            arguments = listOf(navArgument("expenseId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val expenseId = backStackEntry.arguments?.getString("expenseId") ?: return@composable
-            val expenses by eventViewModel.allExpenses.collectAsState()
-            val budgetLines by eventViewModel.budgetLines.collectAsState()
-            // Deleting the expense pops back to the detail screen, but a stale back stack
-            // entry can still recompose once on a row that has gone. Nothing to edit is
-            // not an error worth a screen — it just returns.
-            val expense = expenses.find { it.id == expenseId } ?: return@composable
+            composable(
+                route = Routes.EventDetail.route,
+                arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
+                EventDetailScreen(
+                    eventId = eventId,
+                    onBack = { navController.popBackStack() },
+                    onAddExpense = { navController.navigate(Routes.AddExpense.createRoute(eventId)) },
+                    onEditExpense = { expenseId -> navController.navigate(Routes.EditExpense.createRoute(expenseId)) },
+                    onEditPlan = { navController.navigate(Routes.BudgetPlan.createRoute(eventId)) },
+                    onRequirePro = { trigger -> paywallTrigger = trigger },
+                    eventViewModel = eventViewModel,
+                    exportViewModel = exportViewModel
+                )
+            }
 
-            val events by eventViewModel.events.collectAsState()
+            composable(
+                route = Routes.BudgetPlan.route,
+                arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
+                BudgetPlanScreen(
+                    eventId = eventId,
+                    onBack = { navController.popBackStack() },
+                    eventViewModel = eventViewModel
+                )
+            }
 
-            ExpenseFormScreen(
-                eventId = expense.eventId,
-                events = events,
-                budgetLines = budgetLines,
-                existing = expense,
-                onBack = { navController.popBackStack() },
-                onSave = { result ->
-                    eventViewModel.updateExpense(
-                        expense.copy(
+            composable(
+                route = Routes.AddExpense.route,
+                arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val eventId = backStackEntry.arguments?.getString("eventId") ?: return@composable
+                val budgetLines by eventViewModel.budgetLines.collectAsState()
+                ExpenseFormScreen(
+                    eventId = eventId,
+                    budgetLines = budgetLines,
+                    onBack = { navController.popBackStack() },
+                    onSave = { result ->
+                        eventViewModel.addExpense(
                             eventId = result.eventId,
                             title = result.title,
                             category = result.category,
                             amount = result.amount,
                             notes = result.notes,
-                            dateCreated = result.date,
+                            date = result.date,
                             vendor = result.vendor,
                             amountPaid = result.amountPaid,
                             dueDate = result.dueDate,
                             receiptPath = result.receiptPath
                         )
-                    )
-                    navController.popBackStack()
-                }
-            )
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = Routes.EditExpense.route,
+                arguments = listOf(navArgument("expenseId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val expenseId = backStackEntry.arguments?.getString("expenseId") ?: return@composable
+                val expenses by eventViewModel.allExpenses.collectAsState()
+                val budgetLines by eventViewModel.budgetLines.collectAsState()
+                // Deleting the expense pops back to the detail screen, but a stale back stack
+                // entry can still recompose once on a row that has gone. Nothing to edit is
+                // not an error worth a screen — it just returns.
+                val expense = expenses.find { it.id == expenseId } ?: return@composable
+
+                val events by eventViewModel.events.collectAsState()
+
+                ExpenseFormScreen(
+                    eventId = expense.eventId,
+                    events = events,
+                    budgetLines = budgetLines,
+                    existing = expense,
+                    onBack = { navController.popBackStack() },
+                    onSave = { result ->
+                        eventViewModel.updateExpense(
+                            expense.copy(
+                                eventId = result.eventId,
+                                title = result.title,
+                                category = result.category,
+                                amount = result.amount,
+                                notes = result.notes,
+                                dateCreated = result.date,
+                                vendor = result.vendor,
+                                amountPaid = result.amountPaid,
+                                dueDate = result.dueDate,
+                                receiptPath = result.receiptPath
+                            )
+                        )
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
     }
 

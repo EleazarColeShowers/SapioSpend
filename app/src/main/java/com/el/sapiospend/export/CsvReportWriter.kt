@@ -4,6 +4,7 @@ import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.settings.ActiveCurrency
 import com.el.sapiospend.util.formatDate
+import com.el.sapiospend.util.inDisplayCurrency
 import java.io.OutputStream
 
 /**
@@ -78,11 +79,18 @@ object CsvReportWriter {
         if (Payments.isOverdue(expense, now)) "Overdue" else Payments.statusOf(expense).label
 
     /**
-     * A plain decimal, never grouped. "1,250,000" in a CSV cell is two columns.
+     * A money figure as a plain decimal, never grouped — "1,250,000" in a CSV cell is two
+     * columns.
+     *
+     * Converted into the currency named in the Currency column on the way out. Stored
+     * amounts are in the base currency, which is not necessarily the one the user is
+     * reading in, and the column would otherwise be labelling the figures wrongly.
      */
-    private fun number(value: Double): String =
-        if (value == Math.floor(value) && !value.isInfinite()) "%.0f".format(value)
-        else "%.2f".format(value)
+    private fun number(value: Double): String {
+        val shown = value.inDisplayCurrency()
+        return if (shown == Math.floor(shown) && !shown.isInfinite()) "%.0f".format(shown)
+        else "%.2f".format(shown)
+    }
 
     /**
      * RFC 4180 quoting, plus a guard against formula injection.

@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,9 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.el.sapiospend.R
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
 import com.el.sapiospend.domain.analytics.SpendTrend
 import com.el.sapiospend.ui.component.PlannedVsActualChart
@@ -30,7 +31,6 @@ import com.el.sapiospend.util.formatMoney
 
 @Composable
 fun AnalyticsScreen(
-    onBack: () -> Unit = {},
     onEventClick: (String) -> Unit = {},
     eventViewModel: EventViewModel
 ) {
@@ -60,22 +60,19 @@ fun AnalyticsScreen(
             contentPadding = PaddingValues(top = 24.dp, bottom = 40.dp)
         ) {
             item {
+                // No back arrow: this is a tab, and the bar below is the way out of it.
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Secondary)
-                    }
-                    Spacer(Modifier.width(4.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Analytics",
+                            stringResource(R.string.insights_title),
                             color = AppColors.OnSurface,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.5).sp
                         )
                         Text(
-                            if (portfolio.eventCount == 1) "Across 1 event"
-                            else "Across all ${portfolio.eventCount} events",
+                            if (portfolio.eventCount == 1) stringResource(R.string.insights_subtitle_one)
+                            else stringResource(R.string.insights_subtitle_many, portfolio.eventCount),
                             color = AppColors.Secondary,
                             fontSize = 13.sp
                         )
@@ -99,8 +96,8 @@ fun AnalyticsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.Insights, contentDescription = null, tint = AppColors.Border, modifier = Modifier.size(40.dp))
-                            Text("Nothing to analyse yet", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold)
-                            Text("Create an event and log some expenses", color = AppColors.Secondary, fontSize = 13.sp)
+                            Text(stringResource(R.string.insights_empty_title), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.insights_empty_subtitle), color = AppColors.Secondary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -115,12 +112,12 @@ fun AnalyticsScreen(
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Portfolio", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
+                        Text(stringResource(R.string.label_overview), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, letterSpacing = 0.5.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            PortfolioStat("Budget", portfolio.totalBudget.formatMoney(), Color.White)
-                            PortfolioStat("Spent", portfolio.totalSpent.formatMoney(), Color(0xFFFF6B6B))
+                            PortfolioStat(stringResource(R.string.label_total), portfolio.totalBudget.formatMoney(), Color.White)
+                            PortfolioStat(stringResource(R.string.label_spent), portfolio.totalSpent.formatMoney(), Color(0xFFFF6B6B))
                             PortfolioStat(
-                                "Remaining",
+                                stringResource(R.string.label_remaining),
                                 portfolio.totalRemaining.formatMoney(),
                                 if (portfolio.totalRemaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B)
                             )
@@ -197,7 +194,7 @@ fun AnalyticsScreen(
             }
 
             item {
-                Text("By Event", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                Text(stringResource(R.string.insights_by_budget), color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
             }
 
             items(portfolio.events, key = { it.eventId }) { analytics ->
@@ -271,7 +268,7 @@ fun AnalyticsScreen(
 
                             analytics.projectedOverspend?.let { overspend ->
                                 Text(
-                                    "At this pace you finish ${overspend.formatMoney()} over budget",
+                                    stringResource(R.string.insights_projected_overspend, overspend.formatMoney()),
                                     color = AppColors.Danger,
                                     fontSize = 11.sp
                                 )
@@ -309,7 +306,7 @@ fun AnalyticsScreen(
 
                         analytics.biggestOverrun?.let { overrun ->
                             Text(
-                                "${overrun.category} is ${overrun.variance.formatMoney()} over plan",
+                                stringResource(R.string.categories_over_planned, overrun.category, overrun.variance.formatMoney()),
                                 color = AppColors.Danger,
                                 fontSize = 11.sp
                             )
@@ -317,7 +314,7 @@ fun AnalyticsScreen(
 
                         if (analytics.unallocated > 0 && analytics.totalPlanned > 0) {
                             Text(
-                                "${analytics.unallocated.formatMoney()} of the budget is unallocated",
+                                stringResource(R.string.categories_unallocated, analytics.unallocated.formatMoney()),
                                 color = AppColors.Secondary,
                                 fontSize = 11.sp
                             )

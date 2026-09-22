@@ -3,6 +3,7 @@ package com.el.sapiospend.export
 import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.settings.ActiveCurrency
 import com.el.sapiospend.util.formatDate
+import com.el.sapiospend.util.inDisplayCurrency
 import com.el.sapiospend.util.formatPeriod
 import java.io.OutputStream
 
@@ -49,18 +50,18 @@ object XlsxReportWriter {
             rows += row(
                 text(a.eventName),
                 text(a.eventType),
-                number(a.budget),
-                number(a.totalPlanned),
-                number(a.totalSpent),
-                number(a.totalPaid),
-                number(a.outstanding),
-                number(a.funding.received),
-                number(a.remaining),
+                money(a.budget),
+                money(a.totalPlanned),
+                money(a.totalSpent),
+                money(a.totalPaid),
+                money(a.outstanding),
+                money(a.funding.received),
+                money(a.remaining),
                 number(percentUsed(a.totalSpent, a.budget)),
                 // Blank rather than zero when nobody was counted: a 0 in a guest column
                 // averages into any total the planner builds on top of this sheet.
                 a.guestCount?.let { number(it.toDouble()) } ?: XlsxWriter.Cell.Empty,
-                a.costPerGuest?.let { number(it) } ?: XlsxWriter.Cell.Empty,
+                a.costPerGuest?.let { money(it) } ?: XlsxWriter.Cell.Empty,
                 text(if (a.isOverBudget) "Over budget" else "On track")
             )
         }
@@ -70,10 +71,10 @@ object XlsxReportWriter {
             rows += row(
                 text("TOTAL"),
                 text(""),
-                number(portfolio.totalBudget),
+                money(portfolio.totalBudget),
                 XlsxWriter.Cell.Empty,
-                number(portfolio.totalSpent),
-                number(portfolio.totalRemaining)
+                money(portfolio.totalSpent),
+                money(portfolio.totalRemaining)
             )
             rows += emptyRow()
             rows += row(text("Spend by category (all events)"))
@@ -81,9 +82,9 @@ object XlsxReportWriter {
             portfolio.topCategories.forEach { category ->
                 rows += row(
                     text(category.category),
-                    number(category.planned),
-                    number(category.actual),
-                    number(category.variance)
+                    money(category.planned),
+                    money(category.actual),
+                    money(category.variance)
                 )
             }
         }
@@ -98,31 +99,31 @@ object XlsxReportWriter {
         rows += row(text(a.eventName))
         rows += row(text("Type"), text(a.eventType))
         rows += row(text("Currency"), text(ActiveCurrency.value.code))
-        rows += row(text("Budget"), number(a.budget))
-        rows += row(text("Planned"), number(a.totalPlanned))
-        rows += row(text("Spent"), number(a.totalSpent))
-        rows += row(text("Remaining"), number(a.remaining))
-        rows += row(text("Paid so far"), number(a.totalPaid))
-        rows += row(text("Still owed"), number(a.outstanding))
+        rows += row(text("Budget"), money(a.budget))
+        rows += row(text("Planned"), money(a.totalPlanned))
+        rows += row(text("Spent"), money(a.totalSpent))
+        rows += row(text("Remaining"), money(a.remaining))
+        rows += row(text("Paid so far"), money(a.totalPaid))
+        rows += row(text("Still owed"), money(a.outstanding))
         if (a.payments.overdueCount > 0) {
-            rows += row(text("Overdue"), number(a.payments.overdueAmount))
+            rows += row(text("Overdue"), money(a.payments.overdueAmount))
         }
         a.guestCount?.takeIf { it > 0 }?.let { guests ->
             rows += row(text("Guests"), number(guests.toDouble()))
-            a.costPerGuest?.let { rows += row(text("Cost per guest"), number(it)) }
-            a.budgetPerGuest?.let { rows += row(text("Budget per guest"), number(it)) }
+            a.costPerGuest?.let { rows += row(text("Cost per guest"), money(it)) }
+            a.budgetPerGuest?.let { rows += row(text("Budget per guest"), money(it)) }
         }
         if (a.funding.total > 0) {
-            rows += row(text("Funding received"), number(a.funding.received))
-            rows += row(text("Funding pledged"), number(a.funding.pledged))
-            rows += row(text("Cash position"), number(a.cashPosition))
+            rows += row(text("Funding received"), money(a.funding.received))
+            rows += row(text("Funding pledged"), money(a.funding.pledged))
+            rows += row(text("Cash position"), money(a.cashPosition))
         }
-        rows += row(text("Daily burn rate"), number(a.dailyBurnRate))
+        rows += row(text("Daily burn rate"), money(a.dailyBurnRate))
         rows += row(text("Days tracked"), number(a.daysTracked.toDouble()))
         formatPeriod(a.periodStart, a.periodEnd)?.let { rows += row(text("Period"), text(it)) }
         a.daysRemaining?.let { rows += row(text("Days remaining"), number(it.toDouble())) }
-        a.safeDailySpend?.let { rows += row(text("Safe daily spend"), number(maxOf(it, 0.0))) }
-        a.projectedTotalSpend?.let { rows += row(text("Projected at this pace"), number(it)) }
+        a.safeDailySpend?.let { rows += row(text("Safe daily spend"), money(maxOf(it, 0.0))) }
+        a.projectedTotalSpend?.let { rows += row(text("Projected at this pace"), money(it)) }
         rows += emptyRow()
 
         if (a.categories.isNotEmpty()) {
@@ -130,9 +131,9 @@ object XlsxReportWriter {
             a.categories.forEach { category ->
                 rows += row(
                     text(category.category),
-                    number(category.planned),
-                    number(category.actual),
-                    number(category.variance),
+                    money(category.planned),
+                    money(category.actual),
+                    money(category.variance),
                     text(
                         when {
                             category.isUnplanned -> "Not in plan"
@@ -155,9 +156,9 @@ object XlsxReportWriter {
                 text(expense.title),
                 text(expense.category),
                 text(expense.vendor),
-                number(expense.amount),
-                number(expense.amountPaid),
-                number(expense.outstanding),
+                money(expense.amount),
+                money(expense.amountPaid),
+                money(expense.outstanding),
                 text(Payments.statusOf(expense).label),
                 expense.dueDate?.let { text(it.formatDate()) } ?: XlsxWriter.Cell.Empty,
                 text(expense.notes)
@@ -172,7 +173,7 @@ object XlsxReportWriter {
                 rows += row(
                     text((contribution.receivedAt ?: contribution.dateCreated).formatDate()),
                     text(contribution.source),
-                    number(contribution.amount),
+                    money(contribution.amount),
                     text(if (contribution.isReceived) "Received" else "Pledged"),
                     text(contribution.notes)
                 )
@@ -192,5 +193,16 @@ object XlsxReportWriter {
     private fun row(vararg cells: XlsxWriter.Cell) = cells.toList()
     private fun emptyRow() = emptyList<XlsxWriter.Cell>()
     private fun text(value: String) = XlsxWriter.Cell.Text(value)
+    /**
+     * A money cell, converted into the currency the sheet says it is in.
+     *
+     * Stored amounts are in the base currency; the sheet is headed with the display one.
+     * Everything in this writer that is money goes through here, and [number] is for the
+     * handful of cells that are not — guest counts, day counts, percentages — which
+     * must not be multiplied by an exchange rate.
+     */
+    private fun money(value: Double) = XlsxWriter.Cell.Number(value.inDisplayCurrency())
+
+    /** A cell that holds a count or a percentage, not an amount of money. */
     private fun number(value: Double) = XlsxWriter.Cell.Number(value)
 }
