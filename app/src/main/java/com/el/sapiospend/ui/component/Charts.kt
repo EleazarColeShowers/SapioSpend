@@ -30,6 +30,7 @@ import com.el.sapiospend.domain.analytics.CategoryBreakdown
 import com.el.sapiospend.domain.analytics.MonthlySpend
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.theme.ChartColors
+import com.el.sapiospend.settings.BudgetMoney
 import com.el.sapiospend.util.formatMoney
 
 /**
@@ -68,7 +69,13 @@ private val SURFACE_GAP = 2.dp
 fun PlannedVsActualChart(
     categories: List<CategoryBreakdown>,
     modifier: Modifier = Modifier,
-    maxRows: Int = 8
+    maxRows: Int = 8,
+    /**
+     * The currency these figures are in, when they all belong to one budget. Null for
+     * the Insights version, where the rows pool every budget and have already been
+     * converted into the base currency the app-wide formatting assumes.
+     */
+    money: BudgetMoney? = null
 ) {
     val rows = remember(categories, maxRows) {
         categories.filter { it.actual > 0 || it.planned > 0 }
@@ -109,9 +116,9 @@ fun PlannedVsActualChart(
                     // money is not something to make anyone squint at anyway.
                     Text(
                         if (category.planned > 0) {
-                            "${category.actual.formatMoney()} / ${category.planned.formatMoney()}"
+                            "${category.actual.money(money)} / ${category.planned.money(money)}"
                         } else {
-                            category.actual.formatMoney()
+                            category.actual.money(money)
                         },
                         color = if (category.isOverPlan) AppColors.Danger else AppColors.Secondary,
                         fontSize = 12.sp
@@ -429,3 +436,7 @@ private fun DrawScope.drawRoundedTopRect(
     }
     drawPath(path, color)
 }
+
+/** A figure in one budget's currency, or in the app-wide way when it belongs to none. */
+private fun Double.money(money: BudgetMoney?): String =
+    if (money == null) formatMoney() else formatMoney(money)

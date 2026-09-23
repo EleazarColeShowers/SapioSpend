@@ -1,5 +1,6 @@
 package com.el.sapiospend
 
+import com.el.sapiospend.fake.TEST_MONEY
 import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.domain.template.CustomPlan
 import org.junit.Assert.assertEquals
@@ -21,7 +22,8 @@ class CustomPlanTest {
                 row("TV", "180000"),
                 row("Kitchen items", "150000"),
                 row("Curtains", "80000")
-            )
+            ),
+            TEST_MONEY
         )
 
         assertEquals(6, lines.size)
@@ -32,13 +34,13 @@ class CustomPlanTest {
     @Test
     fun `remaining is the budget less what has been allocated`() {
         val inputs = listOf(row("Bed & mattress", "250000"), row("Sofa", "200000"))
-        assertEquals(1_050_000.0, CustomPlan.unallocated(1_500_000.0, inputs), 0.01)
+        assertEquals(1_050_000.0, CustomPlan.unallocated(1_500_000.0, inputs, TEST_MONEY), 0.01)
     }
 
     @Test
     fun `remaining goes negative once the categories overshoot`() {
         val inputs = listOf(row("Laptop", "900000"), row("Bag", "150000"))
-        assertTrue(CustomPlan.unallocated(1_000_000.0, inputs) < 0)
+        assertTrue(CustomPlan.unallocated(1_000_000.0, inputs, TEST_MONEY) < 0)
     }
 
     @Test
@@ -52,7 +54,8 @@ class CustomPlanTest {
                 row("Rug", ""),
                 row("", "50000"),
                 row("Lamp", "0")
-            )
+            ),
+            TEST_MONEY
         )
 
         assertEquals(1, lines.size)
@@ -61,13 +64,14 @@ class CustomPlanTest {
 
     @Test
     fun `an amount that is not a number contributes nothing`() {
-        assertEquals(0.0, CustomPlan.plannedTotal(listOf(row("Sofa", "."))), 0.01)
+        assertEquals(0.0, CustomPlan.plannedTotal(listOf(row("Sofa", ".")), TEST_MONEY), 0.01)
     }
 
     @Test
     fun `the same category typed twice is merged`() {
         val lines = CustomPlan.linesOf(
-            listOf(row("Kitchen items", "100000"), row("kitchen ITEMS", "50000"))
+            listOf(row("Kitchen items", "100000"), row("kitchen ITEMS", "50000")),
+            TEST_MONEY
         )
 
         assertEquals(1, lines.size)
@@ -78,7 +82,7 @@ class CustomPlanTest {
 
     @Test
     fun `surrounding whitespace is trimmed off category names`() {
-        assertEquals("Sofa", CustomPlan.linesOf(listOf(row("  Sofa  ", "1000"))).first().category)
+        assertEquals("Sofa", CustomPlan.linesOf(listOf(row("  Sofa  ", "1000")), TEST_MONEY).first().category)
     }
 
     @Test
@@ -86,8 +90,8 @@ class CustomPlanTest {
         val blank = CustomPlan.blankRows()
 
         assertEquals(CustomPlan.INITIAL_ROWS, blank.size)
-        assertTrue(CustomPlan.linesOf(blank).isEmpty())
-        assertEquals(0.0, CustomPlan.plannedTotal(blank), 0.01)
+        assertTrue(CustomPlan.linesOf(blank, TEST_MONEY).isEmpty())
+        assertEquals(0.0, CustomPlan.plannedTotal(blank, TEST_MONEY), 0.01)
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.el.sapiospend.domain.template
 
+import com.el.sapiospend.domain.budget.BudgetDirection
+
 /** One category's share of the total budget, expressed as a fraction of 1.0. */
 data class TemplateAllocation(val category: String, val share: Double)
 
@@ -18,7 +20,12 @@ data class BudgetTemplate(
     val name: String,
     val eventType: String,
     val description: String,
-    val allocations: List<TemplateAllocation>
+    val allocations: List<TemplateAllocation>,
+    /**
+     * Which way money moves through a budget started from this template. All but the
+     * savings goal are money going out, so the default carries every entry but one.
+     */
+    val direction: BudgetDirection = BudgetDirection.DEFAULT
 ) {
     /**
      * Splits [totalBudget] across the categories.

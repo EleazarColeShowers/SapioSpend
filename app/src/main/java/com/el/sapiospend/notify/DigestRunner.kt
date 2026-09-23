@@ -19,7 +19,11 @@ import kotlinx.coroutines.flow.first
 class DigestRunner(private val context: Context) {
 
     suspend fun run(now: Long = System.currentTimeMillis()) {
-        val prefs = SettingsRepository.create(context).notifications.value
+        val settings = SettingsRepository.create(context)
+        val prefs = settings.notifications.value
+        // Off storage, not off the ActiveCurrency globals: the tick can run in a process
+        // that never opened the app, where those are still at their defaults.
+        val money = settings.moneyStyle()
         val notifier = Notifier(context)
         val store = BudgetAlertStore.create(context)
 
@@ -53,7 +57,9 @@ class DigestRunner(private val context: Context) {
             expenses = repository.allExpenses.first(),
             budgetLines = repository.allBudgetLines.first(),
             contributions = repository.allContributions.first(),
-            now = now
+            now = now,
+            base = money.base,
+            rates = money.rates
         )
 
         val digest = DailyDigest.build(prefs, portfolio, store.crossed(), now)

@@ -1,6 +1,7 @@
 package com.el.sapiospend.data.local
 
 import com.el.sapiospend.domain.recurring.Materialization
+import com.el.sapiospend.settings.AppCurrency
 import com.el.sapiospend.domain.recurring.RecurringExpenses
 
 // Keeps the ViewModel from importing Room directly — makes it easier to swap
@@ -28,6 +29,20 @@ class EventRepository(
 
     suspend fun updateEvent(event: EventEntity) =
         eventDao.updateEvent(event.copy(updatedAt = now()))
+
+    /**
+     * Moves a budget to another currency, converting everything it owns at [factor].
+     *
+     * The event row is written last and separately from its children only in the sense
+     * that the caller has already decided what the new total is — the user may have
+     * edited it in the same dialog, and a figure they just typed in the new currency
+     * must not then be multiplied by the rate as well.
+     */
+    suspend fun redenominateEvent(event: EventEntity, factor: Double, to: AppCurrency) {
+        val stamp = now()
+        eventDao.redenominateEvent(event.id, factor, to.code, stamp)
+        eventDao.updateEvent(event.copy(currencyCode = to.code, updatedAt = stamp))
+    }
 
     suspend fun deleteEvent(event: EventEntity) =
         eventDao.softDeleteEventCascading(event.id, now())

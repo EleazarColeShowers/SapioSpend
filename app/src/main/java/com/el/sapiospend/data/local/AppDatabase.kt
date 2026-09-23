@@ -10,6 +10,10 @@ import androidx.room.RoomDatabase
  * version 5 added the optional start/end dates that turn an event into a budget period.
  * version 6 added payment tracking on expenses, guest counts, contributions and
  * recurring expense rules.
+ * version 7 added the budget's direction, which is what lets a savings goal call its
+ * entries contributions rather than expenses.
+ * version 8 gave each budget its own currency, so one person's naira salary month and
+ * dollar savings goal can be tracked side by side.
  *
  * There is deliberately no destructive-migration fallback. Once a plan is paid for,
  * dropping the database on a schema change means a planner loses the expense history
@@ -23,7 +27,7 @@ import androidx.room.RoomDatabase
         ContributionEntity::class,
         RecurringExpenseEntity::class
     ],
-    version = 6
+    version = 8
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -44,7 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sapio_spend_db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                     .also { INSTANCE = it }
             }

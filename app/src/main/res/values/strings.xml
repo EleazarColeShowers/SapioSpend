@@ -20,14 +20,14 @@
     <string name="label_remaining">Remaining</string>
     <string name="label_left">Left</string>
     <string name="label_paid">Paid</string>
-    <string name="label_still_owed">Still owed</string>
+    <string name="label_still_owed">Still to pay</string>
     <string name="label_overdue">Overdue</string>
     <string name="label_received">Received</string>
-    <string name="label_pledged">Pledged</string>
-    <string name="label_cash_left">Cash left</string>
+    <string name="label_pledged">Promised</string>
+    <string name="label_cash_left">Cash in hand</string>
     <string name="label_planned">Planned</string>
     <string name="label_over_by">Over by</string>
-    <string name="label_unallocated">Unallocated</string>
+    <string name="label_unallocated">Not assigned</string>
     <string name="label_overview">Overview</string>
     <string name="label_over_budget">Over budget</string>
     <string name="action_back">Back</string>
@@ -67,6 +67,15 @@
     <string name="field_name_hint">e.g. What you\'re planning for</string>
     <string name="field_total">Total (%1$s)</string>
     <string name="field_take_home_pay">Take-Home Pay (%1$s)</string>
+    <string name="field_target">Target (%1$s)</string>
+    <string name="field_currency">Currency</string>
+    <string name="field_currency_hint">What this budget is planned and recorded in. Each budget can use its own.</string>
+    <string name="field_currency_locked">Fixed while this budget has entries in it — change it from Edit budget.</string>
+    <string name="currency_rate_line">1 %1$s = %2$s · rates from %3$s</string>
+    <string name="currency_convert_title">Change this budget\'s currency?</string>
+    <string name="currency_convert_message">Every figure on \"%1$s\" — the total, %2$d entries and the plan — will be converted from %3$s to %4$s at today\'s rate of 1 %3$s = %5$s.\n\nThis rewrites what you recorded. Converting back later will not land on exactly the same figures.</string>
+    <string name="currency_convert_confirm">Convert</string>
+    <string name="home_mixed_currencies"> · converted to %1$s at today\'s rates</string>
     <string name="field_type">Budget Type</string>
     <string name="field_period">Budget Period</string>
     <string name="field_period_month">Budget Month</string>
@@ -97,13 +106,88 @@
     <string name="categories_over_total">Your categories add up to more than the total</string>
     <string name="categories_over_total_savable">Your categories add up to more than the total. You can still save it.</string>
     <string name="categories_allocated">%1$d%% of the total is assigned to a category</string>
-    <string name="categories_unallocated">%1$s of the total is unallocated</string>
+    <string name="categories_unallocated">%1$s of the total isn\'t assigned to a category</string>
     <string name="categories_unplanned">no planned amount</string>
     <string name="categories_custom">My Own Categories</string>
     <string name="categories_custom_blurb">Write your own categories and amounts — free to use</string>
     <string name="home_percent_used">%1$d%% of the total used</string>
     <string name="home_still_to_pay"> · %1$s still to pay</string>
     <string name="categories_over_planned">%1$s is %2$s over its planned amount</string>
+
+
+    <!--
+      The savings-goal vocabulary.
+
+      A savings goal runs the same arithmetic backwards: the total is a target, the
+      categories are where the money will come from, and every entry brings the
+      remaining figure down because the goal is getting closer. The maths was always
+      right; the words were not. An app that asks somebody to "record a spending item"
+      to log their monthly contribution has told them it does not understand what they
+      are doing.
+
+      Every string here is the SAVING half of a pair whose SPENDING half is above, and
+      the two are chosen between in one place — see BudgetWords.
+    -->
+    <string name="label_target">Target</string>
+    <string name="label_saved">Saved</string>
+    <string name="label_still_to_go">Still to go</string>
+    <string name="label_to_go">To go</string>
+    <string name="label_progress">Progress</string>
+
+    <string name="entries_expenses">Expenses</string>
+    <string name="entries_contributions">Contributions</string>
+    <string name="entries_expenses_count">Expenses  %1$d</string>
+    <string name="entries_contributions_count">Contributions  %1$d</string>
+    <string name="entries_expenses_narrowed">Expenses  %1$d of %2$d</string>
+    <string name="entries_contributions_narrowed">Contributions  %1$d of %2$d</string>
+
+    <string name="entry_add_expense">Add expense</string>
+    <string name="entry_add_contribution">Add contribution</string>
+    <string name="entry_form_new_expense">Add Expense</string>
+    <string name="entry_form_new_contribution">Add Contribution</string>
+    <string name="entry_form_edit_expense">Edit Expense</string>
+    <string name="entry_form_edit_contribution">Edit Contribution</string>
+    <string name="entry_form_new_expense_sub">Record a spending item</string>
+    <string name="entry_form_new_contribution_sub">Record money put towards this goal</string>
+    <string name="entry_form_edit_sub">Correct what you recorded</string>
+    <string name="entry_title_expense">Expense Title</string>
+    <string name="entry_title_contribution">What this was</string>
+    <string name="entry_title_expense_hint">e.g. Catering service</string>
+    <string name="entry_title_contribution_hint">e.g. October contribution</string>
+    <string name="entry_amount_help_expense">The full cost, whether or not it is all paid yet</string>
+    <string name="entry_amount_help_contribution">How much went in</string>
+    <string name="entry_save_expense">Save Expense</string>
+    <string name="entry_save_contribution">Save Contribution</string>
+    <string name="entry_delete_expense_title">Delete Expense</string>
+    <string name="entry_delete_contribution_title">Delete Contribution</string>
+    <string name="entry_delete_expense">Delete expense</string>
+    <string name="entry_delete_contribution">Delete contribution</string>
+    <string name="entry_empty_expenses">No expenses yet</string>
+    <string name="entry_empty_contributions">Nothing put away yet</string>
+    <string name="entry_empty_expenses_sub">Tap + to record your first expense</string>
+    <string name="entry_empty_contributions_sub">Tap + to record your first contribution</string>
+    <string name="entry_search_expenses">Search title, vendor, category or notes</string>
+    <string name="entry_search_contributions">Search title, source, category or notes</string>
+    <string name="entry_vendor_expense">Vendor / paid to (optional)</string>
+    <string name="entry_vendor_contribution">Source (optional)</string>
+    <string name="entry_date_expense">Date of expense</string>
+    <string name="entry_date_contribution">Date it went in</string>
+
+    <string name="categories_sources_title">Sources</string>
+    <string name="categories_sources_edit">Edit sources</string>
+    <string name="categories_sources_set">Set sources</string>
+    <string name="categories_sources_hint">Name where the money will come from and how much you expect from each. Clear a row to remove it.</string>
+    <string name="categories_sources_empty_prompt">Say where the money is coming from, and every figure on this screen gets something to be measured against.</string>
+
+    <string name="progress_percent_used">%1$d%% of the total used</string>
+    <string name="progress_percent_reached">%1$d%% of the target reached</string>
+
+    <!-- Budget direction, as the create and edit forms offer it -->
+    <string name="direction_title">Money direction</string>
+    <string name="direction_spending">Money going out</string>
+    <string name="direction_saving">Money coming in</string>
+    <string name="direction_spending_blurb">A total to spend against — an event, a month, a project</string>
+    <string name="direction_saving_blurb">A target to reach — every entry brings it closer</string>
 
     <!-- Insights -->
     <string name="insights_title">Insights</string>
@@ -143,6 +227,32 @@
     <string name="pro_pdf_export_blurb">Client-ready budget reports</string>
     <string name="pro_excel_export">Excel export</string>
     <string name="pro_excel_export_blurb">Take the numbers into your own spreadsheets</string>
+
+    <!--
+      The tutorial.
+
+      Four screens, shown once, skippable from the first. It exists because the best
+      thing in the app — a ready-made breakdown for the kind of thing you are planning —
+      sits behind the + button, and a first-time user has no reason to believe it is
+      there. An empty list that says "tap + to create your first budget" sells nothing.
+    -->
+    <string name="tour_skip">Skip</string>
+    <string name="tour_next">Next</string>
+    <string name="tour_done">Create my first budget</string>
+    <string name="tour_replay">Show the tutorial again</string>
+    <string name="tour_replay_sub">Four screens on what the app does and how to use it</string>
+
+    <string name="tour_1_title">A budget is a pot of money</string>
+    <string name="tour_1_body">A salary month. A wedding. A savings target. You give it a total, split that total into categories, and log what you spend against them.\n\nThat is the whole app. Everything else is a view of those three things.</string>
+
+    <string name="tour_2_title">Never start from a blank page</string>
+    <string name="tour_2_body">Tell SapioSpend what you are planning and it offers breakdowns built for it — a monthly salary, a traditional wedding, a conference, a savings goal.\n\nThe percentages are a starting point. Drag them around until they look like your life.</string>
+
+    <string name="tour_3_title">Log it as it happens</string>
+    <string name="tour_3_body">Record the full cost, then say whether it is paid, part paid on a deposit, or not paid yet. SapioSpend keeps what you owe apart from what you have actually spent.\n\nPut the widget on your home screen and logging a spend takes two taps.</string>
+
+    <string name="tour_4_title">Know where you stand</string>
+    <string name="tour_4_body">Planned against actual, category by category. What you can still safely spend each day. A warning at 80%% of the total, and again if you go over.\n\nIt all stays on your phone. No account, no sign-in, nothing uploaded.</string>
 
     <!-- Update prompt -->
     <string name="update_ready_message">An update is ready to install</string>

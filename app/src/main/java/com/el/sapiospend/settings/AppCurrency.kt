@@ -34,8 +34,15 @@ enum class AppCurrency(
         val DEFAULT = NGN
 
         /** An unrecognised or missing code falls back to the default rather than throwing. */
-        fun fromCode(code: String?): AppCurrency =
-            entries.firstOrNull { it.code == code } ?: DEFAULT
+        fun fromCode(code: String?): AppCurrency = fromCode(code, DEFAULT)
+
+        /**
+         * As [fromCode], for a caller that has a better answer than [DEFAULT] for a
+         * missing code — a budget saved before budgets carried a currency is in whatever
+         * the app was recording in at the time, not necessarily in naira.
+         */
+        fun fromCode(code: String?, fallback: AppCurrency): AppCurrency =
+            entries.firstOrNull { it.code == code } ?: fallback
     }
 }
 

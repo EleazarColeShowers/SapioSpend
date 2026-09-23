@@ -1,5 +1,6 @@
 package com.el.sapiospend
 
+import com.el.sapiospend.fake.TEST_MONEY
 import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.CustomCategoryInput
@@ -20,7 +21,8 @@ class BudgetPlanEditorTest {
     @Test
     fun `rows are seeded from stored lines, biggest allocation first`() {
         val rows = BudgetPlanEditor.rowsFrom(
-            listOf(line("a", "Drinks", 50_000.0), line("b", "Catering", 400_000.0))
+            listOf(line("a", "Drinks", 50_000.0), line("b", "Catering", 400_000.0)),
+            TEST_MONEY
         )
 
         assertEquals(listOf("Catering", "Drinks"), rows.map { it.name })
@@ -30,7 +32,7 @@ class BudgetPlanEditorTest {
 
     @Test
     fun `whole amounts seed the field without a trailing decimal`() {
-        val rows = BudgetPlanEditor.rowsFrom(listOf(line("a", "Catering", 400_000.0)))
+        val rows = BudgetPlanEditor.rowsFrom(listOf(line("a", "Catering", 400_000.0)), TEST_MONEY)
 
         assertEquals("400000", rows.single().amount)
     }
@@ -40,7 +42,7 @@ class BudgetPlanEditorTest {
         val existing = listOf(line("a", "Catering", 400_000.0))
         val rows = listOf(CustomCategoryInput(id = "a", name = "Catering", amount = "450000"))
 
-        val edit = BudgetPlanEditor.edit(EVENT, rows, existing)
+        val edit = BudgetPlanEditor.edit(EVENT, rows, existing, TEST_MONEY)
 
         assertEquals(listOf("a"), edit.lines.map { it.id })
         assertEquals(450_000.0, edit.lines.single().plannedAmount, 0.0)
@@ -55,7 +57,7 @@ class BudgetPlanEditorTest {
             CustomCategoryInput(id = "new", name = "Drinks", amount = "50000")
         )
 
-        val edit = BudgetPlanEditor.edit(EVENT, rows, existing)
+        val edit = BudgetPlanEditor.edit(EVENT, rows, existing, TEST_MONEY)
 
         assertEquals(listOf("a", "new"), edit.lines.map { it.id })
         assertTrue(edit.removedIds.isEmpty())
@@ -66,7 +68,7 @@ class BudgetPlanEditorTest {
         val existing = listOf(line("a", "Catering", 400_000.0), line("b", "Drinks", 50_000.0))
         val rows = listOf(CustomCategoryInput(id = "a", name = "Catering", amount = "400000"))
 
-        val edit = BudgetPlanEditor.edit(EVENT, rows, existing)
+        val edit = BudgetPlanEditor.edit(EVENT, rows, existing, TEST_MONEY)
 
         assertEquals(listOf("b"), edit.removedIds)
     }
@@ -76,7 +78,7 @@ class BudgetPlanEditorTest {
         val existing = listOf(line("a", "Catering", 400_000.0))
         val rows = listOf(CustomCategoryInput(id = "a", name = "Catering", amount = ""))
 
-        val edit = BudgetPlanEditor.edit(EVENT, rows, existing)
+        val edit = BudgetPlanEditor.edit(EVENT, rows, existing, TEST_MONEY)
 
         assertTrue(edit.lines.isEmpty())
         assertEquals(listOf("a"), edit.removedIds)
@@ -90,7 +92,7 @@ class BudgetPlanEditorTest {
             CustomCategoryInput(id = "3", name = "   ", amount = "")
         )
 
-        val edit = BudgetPlanEditor.edit(EVENT, rows, existing = emptyList())
+        val edit = BudgetPlanEditor.edit(EVENT, rows, existing = emptyList(), money = TEST_MONEY)
 
         assertTrue(edit.lines.isEmpty())
         assertTrue(edit.removedIds.isEmpty())
@@ -101,7 +103,8 @@ class BudgetPlanEditorTest {
         val edit = BudgetPlanEditor.edit(
             EVENT,
             listOf(CustomCategoryInput(id = "1", name = "  Catering  ", amount = "1000")),
-            existing = emptyList()
+            existing = emptyList(),
+            money = TEST_MONEY
         )
 
         assertEquals("Catering", edit.lines.single().category)
@@ -112,7 +115,8 @@ class BudgetPlanEditorTest {
         val edit = BudgetPlanEditor.edit(
             EVENT,
             listOf(CustomCategoryInput(id = "1", name = "Catering", amount = "1000")),
-            existing = emptyList()
+            existing = emptyList(),
+            money = TEST_MONEY
         )
 
         assertEquals(EVENT, edit.lines.single().eventId)
@@ -126,7 +130,7 @@ class BudgetPlanEditorTest {
             CustomCategoryInput(name = "Drinks", amount = "50000")
         )
 
-        assertEquals(450_000.0, BudgetPlanEditor.plannedTotal(rows), 0.0)
+        assertEquals(450_000.0, BudgetPlanEditor.plannedTotal(rows, TEST_MONEY), 0.0)
     }
 
     @Test

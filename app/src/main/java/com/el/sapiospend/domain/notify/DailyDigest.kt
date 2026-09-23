@@ -1,6 +1,7 @@
 package com.el.sapiospend.domain.notify
 
 import com.el.sapiospend.domain.analytics.PortfolioAnalytics
+import com.el.sapiospend.settings.AppCurrency
 import com.el.sapiospend.util.DateUtils
 import java.util.Calendar
 
@@ -11,10 +12,18 @@ data class EventReminder(
     /** Whole days left after today. 0 means the period ends today. */
     val daysRemaining: Int,
     val remaining: Double,
-    val safeDailySpend: Double?
+    val safeDailySpend: Double?,
+    /** What those two figures are in — the budget's own currency. */
+    val currency: AppCurrency = AppCurrency.DEFAULT
 )
 
-/** The state of every live budget, for the recurring nudge. */
+/**
+ * The state of every live budget, for the recurring nudge.
+ *
+ * These figures span budgets kept in different currencies, so they arrive already
+ * converted into the app's base currency — see [PortfolioAnalytics.base] — and are
+ * formatted the ordinary app-wide way rather than in any one budget's currency.
+ */
 data class CheckInSummary(
     val activeEvents: Int,
     val totalBudget: Double,
@@ -101,7 +110,8 @@ object DailyDigest {
                 eventName = event.eventName,
                 daysRemaining = daysUntilEnd,
                 remaining = event.remaining,
-                safeDailySpend = event.safeDailySpend
+                safeDailySpend = event.safeDailySpend,
+                currency = event.currency
             )
         }
 

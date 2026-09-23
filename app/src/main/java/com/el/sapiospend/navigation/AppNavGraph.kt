@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
+import com.el.sapiospend.domain.budget.BudgetDirection
 import com.el.sapiospend.ui.component.PaywallSheet
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.settings.SettingsRepository
@@ -34,6 +35,7 @@ import com.el.sapiospend.ui.screen.BudgetPlanScreen
 import com.el.sapiospend.ui.screen.EventDetailScreen
 import com.el.sapiospend.ui.screen.HomeScreen
 import com.el.sapiospend.ui.screen.SettingsScreen
+import com.el.sapiospend.ui.screen.TourScreen
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.ui.viewmodel.UiMessage
@@ -158,11 +160,36 @@ fun AppNavGraph(
         }
     ) { innerPadding ->
 
+        // Frozen at first composition. Finishing the tour flips the stored flag, and a
+        // start destination that reacted to it would tear the NavHost down underneath
+        // the navigation that is already moving away from the tour.
+        val startDestination = remember {
+            if (settingsRepository.tourSeen.value) Routes.Home.route else Routes.Tour.route
+        }
+
         NavHost(
             navController = navController,
-            startDestination = Routes.Home.route,
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
+
+            composable(Routes.Tour.route) {
+                TourScreen(
+                    onFinish = {
+                        settingsRepository.setTourSeen()
+                        // Replayed from Settings there is somewhere to go back to; on a
+                        // first run there is not, and the tour has to be replaced rather
+                        // than popped or the stack is left empty.
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        } else {
+                            navController.navigate(Routes.Home.route) {
+                                popUpTo(Routes.Tour.route) { inclusive = true }
+                            }
+                        }
+                    }
+                )
+            }
 
             composable(Routes.Home.route) {
                 HomeScreen(
@@ -189,7 +216,9 @@ fun AppNavGraph(
                             customLines = input.customLines,
                             startDate = input.startDate,
                             endDate = input.endDate,
-                            guestCount = input.guestCount
+                            guestCount = input.guestCount,
+                            direction = input.direction,
+                            currencyCode = input.currencyCode
                         )
                         navController.popBackStack()
                     }
@@ -216,12 +245,14 @@ fun AppNavGraph(
                     // stored in one. See SettingsRepository.setCurrency.
                     onCurrencyChange = { settingsRepository.setCurrency(it, hasData = events.isNotEmpty()) },
                     baseCurrency = baseCurrency,
+                    hasData = events.isNotEmpty(),
                     rates = rates,
                     onRefreshRates = settingsRepository::refreshRates,
                     notifications = notifications,
                     onNotificationsChange = settingsRepository::setNotifications,
                     notificationsAllowed = notificationsAllowed,
-                    onRequestNotificationPermission = onRequestNotificationPermission
+                    onRequestNotificationPermission = onRequestNotificationPermission,
+                    onShowTour = { navController.navigate(Routes.Tour.route) }
                 )
             }
 
@@ -263,6 +294,12 @@ fun AppNavGraph(
                 ExpenseFormScreen(
                     eventId = eventId,
                     budgetLines = budgetLines,
+                    // Not the whole list: a *new* entry is being recorded against the
+                    // budget the user opened, and offering to file it elsewhere before it
+                    // exists is a decision they did not ask to make. The direction alone
+                    // is what the form needs, so that is all it gets.
+                    direction = events.find { it.id == eventId }?.direction
+                        ?: BudgetDirection.DEFAULT,
                     onBack = { navController.popBackStack() },
                     onSave = { result ->
                         eventViewModel.addExpense(

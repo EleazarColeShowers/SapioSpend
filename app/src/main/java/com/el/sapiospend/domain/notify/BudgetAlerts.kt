@@ -1,6 +1,7 @@
 package com.el.sapiospend.domain.notify
 
 import com.el.sapiospend.domain.analytics.EventAnalytics
+import com.el.sapiospend.settings.AppCurrency
 
 /**
  * The points on the way through a budget worth interrupting somebody for.
@@ -20,7 +21,9 @@ data class BudgetAlert(
     val eventName: String,
     val threshold: BudgetThreshold,
     val spent: Double,
-    val budget: Double
+    val budget: Double,
+    /** What [spent] and [budget] are in — the budget's own currency, not the app's. */
+    val currency: AppCurrency = AppCurrency.DEFAULT
 ) {
     /** Negative once the budget is blown, which the alert says rather than hides. */
     val remaining: Double get() = budget - spent
@@ -84,7 +87,8 @@ object BudgetAlerts {
                 eventName = event.eventName,
                 threshold = newest,
                 spent = event.totalSpent,
-                budget = event.budget
+                budget = event.budget,
+                currency = event.currency
             )
         }
 

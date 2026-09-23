@@ -16,6 +16,8 @@ import com.el.sapiospend.domain.notify.BudgetThreshold
 import com.el.sapiospend.domain.notify.CheckInSummary
 import com.el.sapiospend.domain.notify.EventReminder
 import com.el.sapiospend.settings.SettingsRepository
+import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.MoneyStyle
 import com.el.sapiospend.util.formatMoney
 
 /**
@@ -42,6 +44,17 @@ class Notifier(private val context: Context) {
     private val currency by lazy { SettingsRepository.create(context).moneyStyle() }
 
     /**
+     * How to write an amount belonging to one budget: in that budget's own currency,
+     * exactly as its screens show it.
+     *
+     * A notification about the laptop fund saying "$900 left" and the app saying the
+     * same is the whole point of budgets having their own currency; converting it into
+     * the display currency here would make the two disagree.
+     */
+    private fun styleOf(budgetCurrency: AppCurrency) =
+        MoneyStyle(budgetCurrency, budgetCurrency, currency.rates)
+
+    /**
      * Whether a notification posted right now would be seen.
      *
      * Checked before doing the work of building one, and before scheduling the daily
@@ -51,6 +64,7 @@ class Notifier(private val context: Context) {
     fun canPost(): Boolean = hasPermission(context) && manager.areNotificationsEnabled()
 
     fun notifyBudgetAlert(alert: BudgetAlert) {
+        val currency = styleOf(alert.currency)
         val title = when (alert.threshold) {
             BudgetThreshold.WARNING -> "${alert.eventName} is at ${alert.percentUsed}%"
             BudgetThreshold.EXCEEDED -> "${alert.eventName} is over budget"
@@ -76,6 +90,7 @@ class Notifier(private val context: Context) {
     }
 
     fun notifyReminder(reminder: EventReminder) {
+        val currency = styleOf(reminder.currency)
         val title = when (reminder.daysRemaining) {
             0 -> "${reminder.eventName} ends today"
             1 -> "${reminder.eventName} ends tomorrow"

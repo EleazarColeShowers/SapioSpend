@@ -3,6 +3,7 @@ package com.el.sapiospend.util
 import com.el.sapiospend.settings.ActiveBase
 import com.el.sapiospend.settings.ActiveCurrency
 import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.settings.BudgetMoney
 import com.el.sapiospend.settings.AppCurrency
 import com.el.sapiospend.settings.FxRates
 import com.el.sapiospend.settings.MoneyStyle
@@ -22,6 +23,11 @@ import java.util.Locale
 // [formatAmountInput] on the way out, [parseAmount] on the way back in. A new amount
 // field that reads with toDoubleOrNull instead of parseAmount stores a dollar figure as
 // naira, so parse amounts through here and nowhere else.
+//
+// A budget with a currency of its own is the one case that does not cross the boundary
+// at all: it is recorded in its currency and shown in it, so [BudgetMoney.own] formats
+// exactly and [formatConverted] is the only place a rate is applied — to a second line
+// under the figure, never to the figure itself.
 //
 // When display and base are the same currency — which is every user who never switches,
 // and every user who switches back — all three are exact: the conversion short-circuits
@@ -52,6 +58,41 @@ fun Double.formatMoney(
  */
 fun Double.formatMoney(style: MoneyStyle): String =
     formatMoney(style.display, style.base, style.rates)
+
+/**
+ * An amount belonging to one budget, in that budget's own currency — exact, because
+ * nothing is converted. This is what every figure on a budget's own screens uses.
+ */
+fun Double.formatMoney(money: BudgetMoney): String = formatMoney(money.own)
+
+/**
+ * The same amount converted into whatever the rest of the app is being read in —
+ * "≈ ₦6,639,400" — or null when the budget is already in that currency and the line
+ * would only repeat the figure above it.
+ */
+fun Double.formatConverted(money: BudgetMoney): String? =
+    if (!money.converts) null else "≈ ${formatMoney(money.inDisplay)}"
+
+/**
+ * What the user typed into a field on a budget's own screen, as a stored amount.
+ *
+ * No conversion: the field is labelled in the budget's currency and the budget is
+ * recorded in it, so the number typed is the number kept. Null for anything that is not
+ * a number, keeping "not filled in" distinguishable from a zero.
+ */
+fun String.parseAmount(money: BudgetMoney): Double? = parseAmount(money.currency, money.currency, money.rates)
+
+/** A stored amount back inside a field on a budget's own screen. Exact, as above. */
+fun Double.formatAmountInput(money: BudgetMoney): String =
+    formatAmountInput(money.currency, money.currency, money.rates)
+
+/**
+ * An amount recorded in [from] expressed in [to] — the one conversion that happens
+ * outside a formatter, for figures being pooled across budgets that are kept in
+ * different currencies before anything is added up.
+ */
+fun Double.convertedTo(to: AppCurrency, from: AppCurrency, rates: FxRates = ActiveRates.value): Double =
+    rates.convert(this, from, to)
 
 fun Long.formatDate(): String = dateFormat.get().format(Date(this))
 

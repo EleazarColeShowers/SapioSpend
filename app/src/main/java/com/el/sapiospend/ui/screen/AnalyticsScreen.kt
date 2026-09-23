@@ -27,6 +27,11 @@ import com.el.sapiospend.ui.component.SpendTrendChart
 import com.el.sapiospend.ui.component.shareSlices
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
+import com.el.sapiospend.settings.ActiveBase
+import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.settings.BudgetMoney
+import com.el.sapiospend.util.convertedTo
 import com.el.sapiospend.util.formatMoney
 
 @Composable
@@ -41,10 +46,26 @@ fun AnalyticsScreen(
 
     // Recomputed only when the underlying data changes rather than on every recomposition
     // — this walks every expense of every event.
-    val portfolio = remember(events, allExpenses, budgetLines, contributions) {
-        BudgetAnalytics.portfolio(events, allExpenses, budgetLines, contributions)
+    // The portfolio figures span budgets kept in different currencies, so they are
+    // pooled in the base currency — see PortfolioAnalytics — and read the ordinary
+    // app-wide way. The per-budget cards further down do the opposite: each one is shown
+    // in the currency its own budget is kept in, with nothing converted.
+    val base = ActiveBase.value
+    val rates = ActiveRates.value
+    val portfolio = remember(events, allExpenses, budgetLines, contributions, base, rates) {
+        BudgetAnalytics.portfolio(events, allExpenses, budgetLines, contributions, base = base, rates = rates)
     }
-    val monthlySpend = remember(allExpenses) { SpendTrend.monthly(allExpenses) }
+    // The trend line pools every budget's spending into one series, so each expense is
+    // converted on the way in; a dollar entry left as-is would barely register against
+    // naira ones, or tower over them, depending which way round the two are.
+    val monthlySpend = remember(allExpenses, events, base, rates) {
+        val currencyOf = events.associate { it.id to it.currency(base) }
+        SpendTrend.monthly(
+            allExpenses.map {
+                it.copy(amount = it.amount.convertedTo(base, currencyOf[it.eventId] ?: base, rates))
+            }
+        )
+    }
     val shareOfSpend = remember(portfolio) { shareSlices(portfolio.topCategories) }
 
     Box(
@@ -198,6 +219,8 @@ fun AnalyticsScreen(
             }
 
             items(portfolio.events, key = { it.eventId }) { analytics ->
+                // This card is one budget, so it is written in that budget's currency.
+                val money = BudgetMoney(analytics.currency, ActiveCurrency.value, rates)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
                     shape = RoundedCornerShape(16.dp),
@@ -228,11 +251,11 @@ fun AnalyticsScreen(
                         }
 
                         Row(Modifier.fillMaxWidth()) {
-                            AnalyticsStat("Spent", analytics.totalSpent.formatMoney(), Modifier.weight(1f))
-                            AnalyticsStat("Per day", analytics.dailyBurnRate.formatMoney(), Modifier.weight(1f))
+                            AnalyticsStat("Spent", analytics.totalSpent.formatMoney(money), Modifier.weight(1f))
+                            AnalyticsStat("Spending a day", analytics.dailyBurnRate.formatMoney(money), Modifier.weight(1f))
                             AnalyticsStat(
                                 "Left",
-                                analytics.remaining.formatMoney(),
+                                analytics.remaining.formatMoney(money),
                                 Modifier.weight(1f),
                                 valueColor = if (analytics.isOverBudget) AppColors.Danger else AppColors.Success
                             )
@@ -251,10 +274,10 @@ fun AnalyticsScreen(
                                     Modifier.weight(1f)
                                 )
                                 AnalyticsStat(
-                                    "Safe per day",
+                                    "Safe to spend",
                                     // A negative allowance is nonsense to display; once
                                     // the money is gone the honest figure is zero.
-                                    maxOf(safeDaily, 0.0).formatMoney(),
+                                    maxOf(safeDaily, 0.0).formatMoney(money),
                                     Modifier.weight(1f),
                                     valueColor = if (safeDaily <= 0) AppColors.Danger else AppColors.OnSurface
                                 )
@@ -268,7 +291,7 @@ fun AnalyticsScreen(
 
                             analytics.projectedOverspend?.let { overspend ->
                                 Text(
-                                    stringResource(R.string.insights_projected_overspend, overspend.formatMoney()),
+                                    stringResource(R.string.insights_projected_overspend, overspend.formatMoney(money)),
                                     color = AppColors.Danger,
                                     fontSize = 11.sp
                                 )
@@ -280,7 +303,7 @@ fun AnalyticsScreen(
                         if (analytics.guestCount != null || analytics.outstanding > 0) {
                             Row(Modifier.fillMaxWidth()) {
                                 analytics.costPerGuest?.let {
-                                    AnalyticsStat("Per guest", it.formatMoney(), Modifier.weight(1f))
+                                    AnalyticsStat("Per guest", it.formatMoney(money), Modifier.weight(1f))
                                 }
                                 analytics.guestCount?.let {
                                     AnalyticsStat("Guests", "$it", Modifier.weight(1f))
@@ -288,7 +311,7 @@ fun AnalyticsScreen(
                                 if (analytics.outstanding > 0) {
                                     AnalyticsStat(
                                         "Still owed",
-                                        analytics.outstanding.formatMoney(),
+                                        analytics.outstanding.formatMoney(money),
                                         Modifier.weight(1f),
                                         valueColor = if (analytics.payments.overdueCount > 0) AppColors.Danger else AppColors.Warning
                                     )
@@ -298,7 +321,7 @@ fun AnalyticsScreen(
 
                         if (analytics.funding.total > 0) {
                             Text(
-                                "${analytics.funding.received.formatMoney()} in hand · ${analytics.cashPosition.formatMoney()} after what has been paid out",
+                                "${analytics.funding.received.formatMoney(money)} in hand · ${analytics.cashPosition.formatMoney(money)} after what has been paid out",
                                 color = if (analytics.cashPosition < 0) AppColors.Danger else AppColors.Secondary,
                                 fontSize = 11.sp
                             )
@@ -306,7 +329,7 @@ fun AnalyticsScreen(
 
                         analytics.biggestOverrun?.let { overrun ->
                             Text(
-                                stringResource(R.string.categories_over_planned, overrun.category, overrun.variance.formatMoney()),
+                                stringResource(R.string.categories_over_planned, overrun.category, overrun.variance.formatMoney(money)),
                                 color = AppColors.Danger,
                                 fontSize = 11.sp
                             )
@@ -314,7 +337,7 @@ fun AnalyticsScreen(
 
                         if (analytics.unallocated > 0 && analytics.totalPlanned > 0) {
                             Text(
-                                stringResource(R.string.categories_unallocated, analytics.unallocated.formatMoney()),
+                                stringResource(R.string.categories_unallocated, analytics.unallocated.formatMoney(money)),
                                 color = AppColors.Secondary,
                                 fontSize = 11.sp
                             )

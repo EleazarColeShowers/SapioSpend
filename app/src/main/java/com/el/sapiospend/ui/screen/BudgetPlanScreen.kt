@@ -25,8 +25,10 @@ import androidx.compose.ui.unit.sp
 import com.el.sapiospend.R
 import com.el.sapiospend.domain.plan.BudgetPlanEditor
 import com.el.sapiospend.domain.template.CustomCategoryInput
+import com.el.sapiospend.ui.text.BudgetWords
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
+import com.el.sapiospend.settings.BudgetMoney
 import com.el.sapiospend.util.formatMoney
 import kotlin.math.abs
 import com.el.sapiospend.settings.ActiveCurrency
@@ -54,11 +56,14 @@ fun BudgetPlanScreen(
     val allExpenses by eventViewModel.allExpenses.collectAsState()
     val event = events.find { it.id == eventId }
 
+    /** Every figure on this screen belongs to one budget and is in its currency. */
+    val money = BudgetMoney.forCode(event?.currencyCode)
+
     // Null until the stored plan has been read. Rendering the editor before then would
     // show empty rows for an event that has a plan, and saving those would wipe it.
     var rows by remember(eventId) { mutableStateOf<List<CustomCategoryInput>?>(null) }
     LaunchedEffect(eventId) {
-        rows = BudgetPlanEditor.rowsFrom(eventViewModel.plannedLinesFor(eventId))
+        rows = BudgetPlanEditor.rowsFrom(eventViewModel.plannedLinesFor(eventId), money)
             .ifEmpty { List(3) { CustomCategoryInput() } }
     }
 
@@ -80,10 +85,12 @@ fun BudgetPlanScreen(
     }
     val suggestions = BudgetPlanEditor.unplannedCategories(currentRows, spentCategories)
 
-    val planned = BudgetPlanEditor.plannedTotal(currentRows)
+    val planned = BudgetPlanEditor.plannedTotal(currentRows, money)
     val unallocated = event.budget - planned
     val overAllocated = unallocated < 0
     val allocatedFraction = if (event.budget > 0) (planned / event.budget).toFloat().coerceIn(0f, 1f) else 0f
+    /** A savings goal plans sources of money, not categories of spend. */
+    val words = BudgetWords.of(event.direction)
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = AppColors.OnSurface,
@@ -120,7 +127,7 @@ fun BudgetPlanScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp
                 )
-                Text("${event.name} · ${event.budget.formatMoney()}", color = AppColors.Secondary, fontSize = 13.sp)
+                Text("${event.name} · ${event.budget.formatMoney(money)}", color = AppColors.Secondary, fontSize = 13.sp)
             }
         }
 
@@ -132,12 +139,12 @@ fun BudgetPlanScreen(
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    PlanStat(stringResource(R.string.label_total), event.budget.formatMoney(), Color.White)
-                    PlanStat(stringResource(R.string.label_planned), planned.formatMoney(), Color.White)
+                    PlanStat(stringResource(words.total), event.budget.formatMoney(money), Color.White)
+                    PlanStat(stringResource(R.string.label_planned), planned.formatMoney(money), Color.White)
                     PlanStat(
                         if (overAllocated) stringResource(R.string.label_over_by)
                         else stringResource(R.string.label_unallocated),
-                        abs(unallocated).formatMoney(),
+                        abs(unallocated).formatMoney(money),
                         if (overAllocated) Color(0xFFFF6B6B) else Color(0xFF6EE7B7)
                     )
                 }
@@ -165,7 +172,8 @@ fun BudgetPlanScreen(
         if (suggestions.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "ALREADY SPENT ON, NOT PLANNED",
+                    if (words.showsFundingAndPayments) "ALREADY SPENT ON, NOT PLANNED"
+                    else "ALREADY RECEIVED, NOT PLANNED",
                     color = AppColors.Secondary,
                     fontSize = 11.sp,
                     letterSpacing = 0.5.sp
@@ -202,9 +210,14 @@ fun BudgetPlanScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("CATEGORIES", color = AppColors.Secondary, fontSize = 11.sp, letterSpacing = 0.5.sp)
             Text(
-                stringResource(R.string.categories_hint),
+                stringResource(words.categoriesTitle).uppercase(),
+                color = AppColors.Secondary,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                stringResource(words.categoriesHint),
                 color = AppColors.Border,
                 fontSize = 12.sp
             )
@@ -224,7 +237,12 @@ fun BudgetPlanScreen(
                             onValueChange = { value ->
                                 rows = currentRows.map { if (it.id == row.id) it.copy(name = value) else it }
                             },
-                            placeholder = { Text("Category", fontSize = 13.sp) },
+                            placeholder = {
+                                Text(
+                                    stringResource(if (words.showsFundingAndPayments) R.string.categories_title else R.string.categories_sources_title),
+                                    fontSize = 13.sp
+                                )
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
                             colors = fieldColors,
@@ -275,7 +293,7 @@ fun BudgetPlanScreen(
 
         Button(
             onClick = {
-                eventViewModel.savePlan(eventId, currentRows)
+                eventViewModel.savePlan(eventId, currentRows, money)
                 onBack()
             },
             modifier = Modifier

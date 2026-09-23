@@ -49,6 +49,55 @@ interface EventDao {
         markEventDeleted(eventId, now)
     }
 
+    /**
+     * Re-denominates one budget: every figure it owns is multiplied by [factor] and the
+     * budget is recorded as being in [toCode] from now on.
+     *
+     * One transaction, because a budget whose total moved to dollars while its expenses
+     * stayed in naira is not a half-finished change — it is a budget reporting a
+     * thousandfold overspend. The user is warned before this runs and it is the one
+     * place in the app that rewrites recorded figures.
+     *
+     * In SQL rather than by reading the rows and writing them back: an event can carry
+     * hundreds of expenses, and this way the whole rewrite is four statements that never
+     * leave the database.
+     */
+    @Transaction
+    suspend fun redenominateEvent(eventId: String, factor: Double, toCode: String, now: Long) {
+        scaleExpensesForEvent(eventId, factor, now)
+        scaleBudgetLinesForEvent(eventId, factor, now)
+        scaleContributionsForEvent(eventId, factor, now)
+        scaleRecurringForEvent(eventId, factor, now)
+        setEventCurrency(eventId, toCode, now)
+    }
+
+    @Query("UPDATE events SET currencyCode = :toCode, updatedAt = :now WHERE id = :eventId")
+    suspend fun setEventCurrency(eventId: String, toCode: String, now: Long)
+
+    @Query(
+        "UPDATE expenses SET amount = amount * :factor, amountPaid = amountPaid * :factor, " +
+            "updatedAt = :now WHERE eventId = :eventId AND deletedAt IS NULL"
+    )
+    suspend fun scaleExpensesForEvent(eventId: String, factor: Double, now: Long)
+
+    @Query(
+        "UPDATE budget_lines SET plannedAmount = plannedAmount * :factor, updatedAt = :now " +
+            "WHERE eventId = :eventId AND deletedAt IS NULL"
+    )
+    suspend fun scaleBudgetLinesForEvent(eventId: String, factor: Double, now: Long)
+
+    @Query(
+        "UPDATE contributions SET amount = amount * :factor, updatedAt = :now " +
+            "WHERE eventId = :eventId AND deletedAt IS NULL"
+    )
+    suspend fun scaleContributionsForEvent(eventId: String, factor: Double, now: Long)
+
+    @Query(
+        "UPDATE recurring_expenses SET amount = amount * :factor, updatedAt = :now " +
+            "WHERE eventId = :eventId AND deletedAt IS NULL"
+    )
+    suspend fun scaleRecurringForEvent(eventId: String, factor: Double, now: Long)
+
     @Query("UPDATE events SET deletedAt = :now, updatedAt = :now WHERE id = :eventId")
     suspend fun markEventDeleted(eventId: String, now: Long)
 

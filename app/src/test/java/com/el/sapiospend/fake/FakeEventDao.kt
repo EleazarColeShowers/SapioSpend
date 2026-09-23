@@ -32,6 +32,44 @@ class FakeEventDao(private val db: FakeDatabase) : EventDao {
         }
     }
 
+    override suspend fun setEventCurrency(eventId: String, toCode: String, now: Long) {
+        db.events.value = db.events.value.map {
+            if (it.id == eventId) it.copy(currencyCode = toCode, updatedAt = now) else it
+        }
+    }
+
+    override suspend fun scaleExpensesForEvent(eventId: String, factor: Double, now: Long) {
+        db.expenses.value = db.expenses.value.map {
+            if (it.eventId == eventId && it.deletedAt == null)
+                it.copy(amount = it.amount * factor, amountPaid = it.amountPaid * factor, updatedAt = now)
+            else it
+        }
+    }
+
+    override suspend fun scaleBudgetLinesForEvent(eventId: String, factor: Double, now: Long) {
+        db.budgetLines.value = db.budgetLines.value.map {
+            if (it.eventId == eventId && it.deletedAt == null)
+                it.copy(plannedAmount = it.plannedAmount * factor, updatedAt = now)
+            else it
+        }
+    }
+
+    override suspend fun scaleContributionsForEvent(eventId: String, factor: Double, now: Long) {
+        db.contributions.value = db.contributions.value.map {
+            if (it.eventId == eventId && it.deletedAt == null)
+                it.copy(amount = it.amount * factor, updatedAt = now)
+            else it
+        }
+    }
+
+    override suspend fun scaleRecurringForEvent(eventId: String, factor: Double, now: Long) {
+        db.recurringRules.value = db.recurringRules.value.map {
+            if (it.eventId == eventId && it.deletedAt == null)
+                it.copy(amount = it.amount * factor, updatedAt = now)
+            else it
+        }
+    }
+
     override suspend fun markExpensesDeletedForEvent(eventId: String, now: Long) {
         db.expenses.value = db.expenses.value.map {
             if (it.eventId == eventId && it.deletedAt == null) it.copy(deletedAt = now, updatedAt = now) else it

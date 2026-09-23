@@ -16,6 +16,12 @@ import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.data.local.RecurringExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
+import com.el.sapiospend.settings.ActiveBase
+import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.BudgetMoney
+import com.el.sapiospend.settings.FxRates
+import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.domain.budget.BudgetDirection
 import com.el.sapiospend.domain.payment.PaymentStatus
 import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.domain.recurring.Recurrence
@@ -90,7 +96,11 @@ class EventViewModel(
     init {
         viewModelScope.launch {
             combine(events, allExpenses, budgetLines, contributions) { events, expenses, lines, funding ->
-                BudgetAnalytics.portfolio(events, expenses, lines, funding).events
+                BudgetAnalytics.portfolio(
+                    events, expenses, lines, funding,
+                    base = ActiveBase.value,
+                    rates = ActiveRates.value
+                ).events
             }.collect(alerts::publish)
         }
 
@@ -127,7 +137,10 @@ class EventViewModel(
         customLines: List<CategoryAmount> = emptyList(),
         startDate: Long? = null,
         endDate: Long? = null,
-        guestCount: Int? = null
+        guestCount: Int? = null,
+        direction: BudgetDirection = BudgetDirection.DEFAULT,
+        /** What [budget] and [customLines] are in. Null follows the app-wide base. */
+        currencyCode: String? = null
     ) {
         viewModelScope.launch {
             if (!entitlements.canCreateEvent(repository.activeEventCount())) {
@@ -141,7 +154,9 @@ class EventViewModel(
                 name = name,
                 budget = budget,
                 eventType = eventType,
+                moneyDirection = direction.name,
                 guestCount = guestCount,
+                currencyCode = currencyCode,
                 startDate = start,
                 endDate = end
             )
@@ -175,11 +190,27 @@ class EventViewModel(
      * are editable now and a reversed range turns every pacing figure — days left, safe
      * daily spend, whether the money is outrunning the calendar — negative.
      */
-    fun updateEvent(event: EventEntity) {
+    /**
+     * Saves an edited budget.
+     *
+     * [convertFrom] is set only when the user has moved the budget to another currency
+     * and confirmed it: everything the budget owns is then multiplied by today's rate,
+     * so its expenses and plan still mean what its total means. The total itself is
+     * taken from [event] untouched, because the edit dialog has already been showing —
+     * and letting the user correct — the figure in the new currency.
+     */
+    fun updateEvent(event: EventEntity, convertFrom: AppCurrency? = null, rates: FxRates = ActiveRates.value) {
         viewModelScope.launch {
             val (start, end) = normalizePeriod(event.startDate, event.endDate)
-            runCatching { repository.updateEvent(event.copy(startDate = start, endDate = end)) }
-                .onFailure { _message.value = UiMessage.Error("Could not save the budget: ${it.message}") }
+            val normalized = event.copy(startDate = start, endDate = end)
+            val to = AppCurrency.fromCode(normalized.currencyCode, ActiveBase.value)
+            runCatching {
+                if (convertFrom != null && convertFrom != to) {
+                    repository.redenominateEvent(normalized, rates.unitRate(convertFrom, to), to)
+                } else {
+                    repository.updateEvent(normalized)
+                }
+            }.onFailure { _message.value = UiMessage.Error("Could not save the budget: ${it.message}") }
         }
     }
 
@@ -217,10 +248,10 @@ class EventViewModel(
      * spend is the ordinary half of budgeting, and a plan the user cannot write is a
      * budget app that only records regret.
      */
-    fun savePlan(eventId: String, rows: List<CustomCategoryInput>) {
+    fun savePlan(eventId: String, rows: List<CustomCategoryInput>, money: BudgetMoney) {
         viewModelScope.launch {
             val existing = repository.budgetLinesFor(eventId)
-            val edit = BudgetPlanEditor.edit(eventId, rows, existing)
+            val edit = BudgetPlanEditor.edit(eventId, rows, existing, money)
             runCatching { repository.savePlan(edit.lines, edit.removedIds) }
                 .onFailure { _message.value = UiMessage.Error("Could not save the categories: ${it.message}") }
         }

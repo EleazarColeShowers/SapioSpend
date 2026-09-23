@@ -2,6 +2,8 @@ package com.el.sapiospend.data.local
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.el.sapiospend.domain.budget.BudgetDirection
+import com.el.sapiospend.settings.AppCurrency
 import java.util.UUID
 
 /**
@@ -18,6 +20,17 @@ import java.util.UUID
  * "nobody counted" and "an event for nobody" are different facts, and cost per head is
  * only worth showing for the first of the two when it has actually been answered.
  *
+ * direction says whether the total is money to spend or a target to reach. Held as the
+ * enum's name rather than a boolean so a third kind of budget does not need a migration,
+ * and defaulted to SPENDING because that is what every budget created before it existed
+ * was.
+ *
+ * currencyCode is the currency this budget's own figures — its total, its expenses, its
+ * plan, its funding — are recorded in. Null means the budget predates the column and is
+ * therefore denominated in the app-wide base currency, which is exactly what it was
+ * recorded in; that is a real answer rather than a missing one, which is why this is
+ * nullable where moneyDirection is not. Read it through [currency].
+ *
  * startDate/endDate bound the budget in time. Both are null for the open-ended events
  * the app shipped with, which is why they are nullable rather than defaulted to the
  * creation date — "no period" and "a period that happens to start today" produce very
@@ -29,8 +42,12 @@ data class EventEntity(
     val name: String,
     val budget: Double,
     val eventType: String = "General",
+    /** [BudgetDirection] by name. Read it through [direction] rather than comparing strings. */
+    val moneyDirection: String = BudgetDirection.DEFAULT.name,
     /** Heads to divide the spend by, or null when the user has not said. */
     val guestCount: Int? = null,
+    /** [AppCurrency] by code, or null for a budget that follows the app-wide base. */
+    val currencyCode: String? = null,
     val dateCreated: Long = System.currentTimeMillis(),
     val startDate: Long? = null,
     val endDate: Long? = null,
@@ -38,6 +55,20 @@ data class EventEntity(
     val updatedAt: Long = System.currentTimeMillis(),
     val deletedAt: Long? = null
 ) {
+    /** The typed form of [moneyDirection]. */
+    val direction: BudgetDirection get() = BudgetDirection.fromName(moneyDirection)
+
+    /**
+     * The currency this budget's figures are in.
+     *
+     * [base] is what an unset [currencyCode] means — pass the app's base currency, which
+     * is what the figures of a budget created before this column were recorded in.
+     */
+    fun currency(base: AppCurrency): AppCurrency = AppCurrency.fromCode(currencyCode, base)
+
+    /** True when this budget's total is a target to reach rather than money to spend. */
+    val isSavingsGoal: Boolean get() = direction.isSaving
+
     /** True once the budget is bounded at both ends — the case pacing maths needs. */
     val hasPeriod: Boolean get() = startDate != null && endDate != null
 

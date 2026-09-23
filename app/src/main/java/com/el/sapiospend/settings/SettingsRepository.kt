@@ -131,6 +131,28 @@ class SettingsRepository(private val prefs: SharedPreferences) {
      * so cannot use the [ActiveCurrency]/[ActiveBase]/[ActiveRates] globals.
      */
     fun moneyStyle(): MoneyStyle = MoneyStyle(_currency.value, _baseCurrency.value, _rates.value)
+    // --- The tutorial ---------------------------------------------------------------
+
+    private val _tourSeen = MutableStateFlow(prefs.getBoolean(KEY_TOUR_SEEN, false))
+
+    /**
+     * Whether the four-screen tour has been got through or skipped.
+     *
+     * Read synchronously at construction rather than collected, because the nav graph
+     * has to choose a start destination on the very first composition — a flow that
+     * arrives a frame later would show Home and then replace it, which is worse than no
+     * tour at all.
+     *
+     * Skipping counts as seen. Somebody who dismissed it does not want it again next
+     * launch; Settings is where they go if they change their mind.
+     */
+    val tourSeen: StateFlow<Boolean> = _tourSeen.asStateFlow()
+
+    fun setTourSeen(seen: Boolean = true) {
+        prefs.edit().putBoolean(KEY_TOUR_SEEN, seen).apply()
+        _tourSeen.value = seen
+    }
+
     private val _notifications = MutableStateFlow(readNotifications())
     val notifications: StateFlow<NotificationPrefs> = _notifications.asStateFlow()
     fun setNotifications(value: NotificationPrefs) {
@@ -168,6 +190,7 @@ class SettingsRepository(private val prefs: SharedPreferences) {
         private const val KEY_BUDGET_ALERTS = "notify_budget_alerts"
         private const val KEY_CHECK_IN = "notify_check_in"
         private const val KEY_HOUR = "notify_hour"
+        private const val KEY_TOUR_SEEN = "tour_seen"
 
         fun create(context: Context): SettingsRepository =
             SettingsRepository(

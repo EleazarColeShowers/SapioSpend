@@ -22,8 +22,8 @@ android {
         applicationId = "com.el.sapiospend"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.1"
+        versionCode = 9
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -41,9 +41,14 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            // R8. Google Play flags a release whose DEX is unobfuscated and
+            // unoptimised; leaving this off also ships the app's full symbol names.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.findByName("release")
         }
     }

@@ -27,7 +27,14 @@ fun OverviewStat(
     label: String,
     value: String,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * The same figure in the currency the rest of the app is read in, for a budget kept
+     * in another one. Null when there is nothing to convert, which is the common case —
+     * an empty line here would put a gap under every figure in the app to serve the few
+     * that need it.
+     */
+    converted: String? = null
 ) {
     Column(
         modifier = modifier,
@@ -54,5 +61,17 @@ fun OverviewStat(
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
         )
+        // Below the label, not above it: the converted figure is an orientation, and
+        // putting it between the amount and its label would read as a second amount.
+        converted?.let {
+            Text(
+                it,
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }

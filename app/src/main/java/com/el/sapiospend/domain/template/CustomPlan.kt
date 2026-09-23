@@ -1,5 +1,6 @@
 package com.el.sapiospend.domain.template
 
+import com.el.sapiospend.settings.BudgetMoney
 import com.el.sapiospend.util.parseAmount
 import java.util.UUID
 
@@ -42,16 +43,20 @@ object CustomPlan {
     /**
      * The rows that are actually worth saving, as concrete amounts.
      *
+     * [money] is the budget being planned, and the rows are read in its currency — the
+     * same currency the total above them is typed in, so the two can be compared
+     * without a conversion sitting between them.
+     *
      * Blank and zero rows are dropped rather than saved empty — a plan line of ₦0 shows
      * up in every breakdown and report as a category nobody funded. Two rows naming the
      * same category are merged instead of both being written, since analytics groups by
      * category name anyway and a split line would only ever be displayed added together.
      */
-    fun linesOf(inputs: List<CustomCategoryInput>): List<CategoryAmount> {
+    fun linesOf(inputs: List<CustomCategoryInput>, money: BudgetMoney): List<CategoryAmount> {
         val merged = LinkedHashMap<String, CategoryAmount>()
         inputs.forEach { input ->
             val name = input.name.trim()
-            val amount = input.amount.parseAmount() ?: 0.0
+            val amount = input.amount.parseAmount(money) ?: 0.0
             if (name.isEmpty() || amount <= 0) return@forEach
 
             val key = name.lowercase()
@@ -63,13 +68,13 @@ object CustomPlan {
     }
 
     /** What the categories add up to — the figure the user is checking against the budget. */
-    fun plannedTotal(inputs: List<CustomCategoryInput>): Double =
-        linesOf(inputs).sumOf { it.amount }
+    fun plannedTotal(inputs: List<CustomCategoryInput>, money: BudgetMoney): Double =
+        linesOf(inputs, money).sumOf { it.amount }
 
     /**
      * Budget minus what has been allocated. Negative once the categories overshoot, which
      * is allowed: catching an overshoot is the point of showing the number at all.
      */
-    fun unallocated(budget: Double, inputs: List<CustomCategoryInput>): Double =
-        budget - plannedTotal(inputs)
+    fun unallocated(budget: Double, inputs: List<CustomCategoryInput>, money: BudgetMoney): Double =
+        budget - plannedTotal(inputs, money)
 }

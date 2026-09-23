@@ -7,6 +7,12 @@ package com.el.sapiospend.navigation
  * Event ids are UUID strings rather than ints since the move to client-generated keys.
  */
 sealed class Routes(val route: String) {
+    /**
+     * The first-run tutorial. Also reachable from Settings, which is why it is a real
+     * destination rather than a flag the Home screen draws over itself.
+     */
+    data object Tour : Routes("tour")
+
     /** Main screen listing all events and the overall budget overview. */
     data object Home : Routes("home")
 

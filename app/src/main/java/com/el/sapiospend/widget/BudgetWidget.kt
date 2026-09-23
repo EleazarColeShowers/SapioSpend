@@ -12,6 +12,7 @@ import com.el.sapiospend.R
 import com.el.sapiospend.data.local.AppDatabase
 import com.el.sapiospend.data.local.EventRepository
 import com.el.sapiospend.settings.SettingsRepository
+import com.el.sapiospend.util.convertedTo
 import com.el.sapiospend.util.formatMoney
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,17 +58,30 @@ class BudgetWidget : AppWidgetProvider() {
             db.contributionDao(),
             db.recurringExpenseDao()
         )
-        val events = repository.events.first()
-        val expenses = repository.allExpenses.first()
+        // Savings goals are left out of both figures. The widget says LEFT TO SPEND,
+        // and the gap between a savings target and what has been put away is the
+        // opposite of that — it is money still to be found, not money available.
+        val events = repository.events.first().filterNot { it.isSavingsGoal }
+        val spendingIds = events.mapTo(mutableSetOf()) { it.id }
+        val expenses = repository.allExpenses.first().filter { it.eventId in spendingIds }
 
         // Read from storage rather than from the ActiveCurrency globals: the widget is
         // drawn in a process that may never have opened the app — after a reboot, or an
         // update — and those would still be sitting at their defaults.
         val currency = SettingsRepository.create(context).moneyStyle()
 
-        val budget = events.sumOf { it.budget }
-        val spent = expenses.sumOf { it.amount }
-        val owed = expenses.sumOf { it.outstanding }
+        // Budgets are each kept in their own currency, so a dollar total and a naira one
+        // cannot simply be added. Every figure is converted into the base currency — what
+        // an unqualified amount means everywhere else in the app — and formatMoney then
+        // renders it in whatever the user reads in, exactly as it does on Home.
+        val currencyOf = events.associate { it.id to it.currency(currency.base) }
+        val budget = events.sumOf { it.budget.convertedTo(currency.base, currencyOf.getValue(it.id), currency.rates) }
+        val spent = expenses.sumOf {
+            it.amount.convertedTo(currency.base, currencyOf.getValue(it.eventId), currency.rates)
+        }
+        val owed = expenses.sumOf {
+            it.outstanding.convertedTo(currency.base, currencyOf.getValue(it.eventId), currency.rates)
+        }
 
         if (events.isEmpty()) {
             views.setTextViewText(R.id.widget_amount, context.getString(R.string.widget_empty))

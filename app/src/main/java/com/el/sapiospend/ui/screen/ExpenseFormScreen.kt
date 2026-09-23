@@ -37,6 +37,8 @@ import androidx.compose.ui.window.Dialog
 import com.el.sapiospend.R
 import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.data.local.EventEntity
+import com.el.sapiospend.domain.budget.BudgetDirection
+import com.el.sapiospend.ui.text.BudgetWords
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.payment.PaymentStatus
 import com.el.sapiospend.domain.payment.Payments
@@ -49,7 +51,7 @@ import com.el.sapiospend.util.formatAmountInput
 import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatMoney
-import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.BudgetMoney
 import kotlinx.coroutines.launch
 
 /**
@@ -95,6 +97,13 @@ fun ExpenseFormScreen(
     budgetLines: List<BudgetLineEntity> = emptyList(),
     /** The expense being corrected, or null when recording a new one. */
     existing: ExpenseEntity? = null,
+    /**
+     * Which way money moves through the budget this form opened on, so a savings goal is
+     * not asked to record a spending item. Only a fallback: once [events] is populated
+     * the direction is read from whichever budget is currently selected, which is what
+     * keeps the wording right after an expense is moved to a budget of the other kind.
+     */
+    direction: BudgetDirection = BudgetDirection.DEFAULT,
     onBack: () -> Unit = {},
     onSave: (ExpenseFormResult) -> Unit = {}
 ) {
@@ -105,6 +114,22 @@ fun ExpenseFormScreen(
     val isEditing = existing != null
 
     var targetEventId by remember(eventId) { mutableStateOf(eventId) }
+
+    /**
+     * The currency this form reads and writes in: the selected budget's own.
+     *
+     * It follows the budget rather than the app, because the entry is going to live on
+     * that budget and be totalled against it — typing dollars into a naira month would
+     * put a figure a thousand times too large on its Spent line.
+     */
+    val money = BudgetMoney.forCode(events.firstOrNull { it.id == targetEventId }?.currencyCode)
+
+    /** The words this form speaks, following the budget currently selected. */
+    val words = BudgetWords.of(
+        events.firstOrNull { it.id == targetEventId }?.direction ?: direction
+    )
+    /** Read once: the calendar dialog is not the only caller and both must agree. */
+    val dateFieldTitle = stringResource(words.dateField)
 
     /**
      * Categories the selected event actually budgeted for. They lead the list so spend
@@ -135,7 +160,7 @@ fun ExpenseFormScreen(
 
     var title by remember(existing) { mutableStateOf(existing?.title.orEmpty()) }
     var vendor by remember(existing) { mutableStateOf(existing?.vendor.orEmpty()) }
-    var amount by remember(existing) { mutableStateOf(existing?.amount?.formatAmountInput().orEmpty()) }
+    var amount by remember(existing) { mutableStateOf(existing?.amount?.formatAmountInput(money).orEmpty()) }
     var notes by remember(existing) { mutableStateOf(existing?.notes.orEmpty()) }
     var date by remember(existing) { mutableLongStateOf(existing?.dateCreated ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -152,7 +177,27 @@ fun ExpenseFormScreen(
         mutableStateOf(existing?.let(Payments::statusOf) ?: PaymentStatus.PAID)
     }
     var deposit by remember(existing) {
-        mutableStateOf(existing?.takeIf { Payments.statusOf(it) == PaymentStatus.PARTIAL }?.amountPaid?.formatAmountInput().orEmpty())
+        mutableStateOf(existing?.takeIf { Payments.statusOf(it) == PaymentStatus.PARTIAL }?.amountPaid?.formatAmountInput(money).orEmpty())
+    }
+
+    /**
+     * The currency the figures in the fields are currently written in.
+     *
+     * Moving an entry to a budget kept in another currency converts what has been typed,
+     * rather than letting "120000" stand as naira one moment and dollars the next. The
+     * conversion is at today's rate and only touches the form — nothing is written until
+     * the user saves.
+     */
+    var typedIn by remember(existing, eventId) { mutableStateOf(money.currency) }
+    LaunchedEffect(money.currency) {
+        if (money.currency != typedIn) {
+            fun moved(text: String): String = text.toDoubleOrNull()
+                ?.let { money.rates.convert(it, typedIn, money.currency).formatAmountInput(money) }
+                ?: text
+            amount = moved(amount)
+            deposit = moved(deposit)
+            typedIn = money.currency
+        }
     }
 
     var dueDate by remember(existing) { mutableStateOf(existing?.dueDate) }
@@ -208,7 +253,7 @@ fun ExpenseFormScreen(
     if (showDatePicker) {
         DayCalendarDialog(
             initialDay = date,
-            title = "Date of expense",
+            title = dateFieldTitle,
             onDismiss = { showDatePicker = false },
             onConfirm = { day ->
                 date = DateUtils.instantOnDay(day)
@@ -265,11 +310,11 @@ fun ExpenseFormScreen(
         unfocusedContainerColor = AppColors.Surface
     )
 
-    // Parsed straight into the base currency, so every comparison below — and
-    // everything that reaches the database — is in the same unit as the stored data,
-    // whichever currency the user happens to be typing in.
-    val amountValue = amount.parseAmount() ?: 0.0
-    val depositValue = deposit.parseAmount() ?: 0.0
+    // In the selected budget's currency, which is what the fields are labelled with and
+    // what the figures are stored as — so everything below compares like with like and
+    // nothing is converted on the way to the database.
+    val amountValue = amount.parseAmount(money) ?: 0.0
+    val depositValue = deposit.parseAmount(money) ?: 0.0
     val depositTooLarge = paymentStatus == PaymentStatus.PARTIAL && depositValue > amountValue
 
     Column(
@@ -289,14 +334,14 @@ fun ExpenseFormScreen(
             Spacer(Modifier.width(4.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    if (isEditing) "Edit Expense" else "Add Expense",
+                    stringResource(if (isEditing) words.formTitleEdit else words.formTitleNew),
                     color = AppColors.OnSurface,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp
                 )
                 Text(
-                    if (isEditing) "Correct what you recorded" else "Record a spending item",
+                    stringResource(if (isEditing) words.formSubtitleEdit else words.formSubtitleNew),
                     color = AppColors.Secondary,
                     fontSize = 13.sp
                 )
@@ -313,8 +358,8 @@ fun ExpenseFormScreen(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Expense Title") },
-                    placeholder = { Text("e.g. Catering service") },
+                    label = { Text(stringResource(words.titleField)) },
+                    placeholder = { Text(stringResource(words.titleFieldHint)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors,
@@ -329,7 +374,7 @@ fun ExpenseFormScreen(
                 OutlinedTextField(
                     value = vendor,
                     onValueChange = { vendor = it },
-                    label = { Text("Vendor / paid to (optional)") },
+                    label = { Text(stringResource(words.vendorField)) },
                     placeholder = { Text("e.g. Chidi Catering") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -342,9 +387,9 @@ fun ExpenseFormScreen(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amount = v },
-                    label = { Text("Amount (${ActiveCurrency.value.symbol})") },
+                    label = { Text("Amount (${money.currency.symbol})") },
                     placeholder = { Text("e.g. 25000") },
-                    supportingText = { Text("The full cost, whether or not it is all paid yet", fontSize = 11.sp) },
+                    supportingText = { Text(stringResource(words.amountHelp), fontSize = 11.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors,
@@ -354,7 +399,10 @@ fun ExpenseFormScreen(
                 )
 
                 // --- Payment ---------------------------------------------------------
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Money arriving is not half-settled and cannot fall due, so a savings
+                // goal is shown none of this. Leaving it up was the heart of the problem:
+                // a contribution form asking whether the money had been paid yet.
+                if (words.showsFundingAndPayments) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Payment", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -385,7 +433,7 @@ fun ExpenseFormScreen(
                         OutlinedTextField(
                             value = deposit,
                             onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) deposit = v },
-                            label = { Text("Deposit paid (${ActiveCurrency.value.symbol})") },
+                            label = { Text("Deposit paid (${money.currency.symbol})") },
                             placeholder = { Text("e.g. 100000") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -395,7 +443,7 @@ fun ExpenseFormScreen(
                             supportingText = {
                                 Text(
                                     if (depositTooLarge) "A deposit cannot be more than the amount"
-                                    else "${(amountValue - depositValue).coerceAtLeast(0.0).formatMoney()} still owing",
+                                    else "${(amountValue - depositValue).coerceAtLeast(0.0).formatMoney(money)} still owing",
                                     color = if (depositTooLarge) AppColors.Danger else AppColors.Secondary,
                                     fontSize = 11.sp
                                 )
@@ -580,7 +628,12 @@ fun ExpenseFormScreen(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Category", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                    Text(
+                        stringResource(if (words.showsFundingAndPayments) R.string.categories_title else R.string.categories_sources_title),
+                        color = AppColors.Secondary,
+                        fontSize = 12.sp,
+                        letterSpacing = 0.5.sp
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -609,10 +662,16 @@ fun ExpenseFormScreen(
 
                 Button(
                     onClick = {
-                        val paid = when (paymentStatus) {
-                            PaymentStatus.PAID -> amountValue
-                            PaymentStatus.UNPAID -> 0.0
-                            PaymentStatus.PARTIAL -> depositValue.coerceIn(0.0, amountValue)
+                        // With the payment chips hidden there is no status to honour:
+                        // money put towards a goal has arrived in full by definition, and
+                        // carrying a stale PARTIAL through would leave a contribution
+                        // reporting a balance owed on a screen with no way to clear it.
+                        val settled = !words.showsFundingAndPayments
+                        val paid = when {
+                            settled -> amountValue
+                            paymentStatus == PaymentStatus.PAID -> amountValue
+                            paymentStatus == PaymentStatus.UNPAID -> 0.0
+                            else -> depositValue.coerceIn(0.0, amountValue)
                         }
                         val committed = receiptPath
                         // The save is going through, so anything this screen wrote and is
@@ -636,7 +695,7 @@ fun ExpenseFormScreen(
                                 // A settled expense keeps no deadline: the date would sit
                                 // in the database waiting to make a paid line look overdue
                                 // if its amount were later corrected upwards.
-                                dueDate = dueDate.takeIf { paymentStatus != PaymentStatus.PAID },
+                                dueDate = dueDate.takeIf { !settled && paymentStatus != PaymentStatus.PAID },
                                 receiptPath = committed
                             )
                         )
@@ -651,9 +710,13 @@ fun ExpenseFormScreen(
                         disabledContainerColor = AppColors.Border,
                         disabledContentColor = AppColors.Secondary
                     ),
-                    enabled = title.isNotBlank() && amount.isNotBlank() && !depositTooLarge
+                    enabled = title.isNotBlank() && amount.isNotBlank() &&
+                        (!words.showsFundingAndPayments || !depositTooLarge)
                 ) {
-                    Text(if (isEditing) "Save Changes" else "Save Expense", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isEditing) "Save Changes" else stringResource(words.saveEntry),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

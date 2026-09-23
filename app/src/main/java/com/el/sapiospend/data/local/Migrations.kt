@@ -2,6 +2,7 @@ package com.el.sapiospend.data.local
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.el.sapiospend.domain.budget.BudgetDirection
 
 /**
  * 3 -> 4: integer primary keys become client-generated ids, every table gains
@@ -95,6 +96,38 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_expenses_eventId` ON `recurring_expenses` (`eventId`)")
+    }
+}
+
+/**
+ * 6 -> 7: events gain a direction, so a savings goal can stop calling its contributions
+ * expenses.
+ *
+ * NOT NULL with a default rather than nullable: every budget that already exists is
+ * money going out — that is the only kind the app could create — so there is no such
+ * thing as an event whose direction is unknown, and making it nullable would invent one.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `events` ADD COLUMN `moneyDirection` TEXT NOT NULL DEFAULT '${BudgetDirection.DEFAULT.name}'"
+        )
+    }
+}
+
+/**
+ * 7 -> 8: a budget can be denominated in its own currency, so a dollar savings goal and
+ * a naira salary month can sit on the same Home screen.
+ *
+ * Nullable with no default, and deliberately not backfilled: every budget that already
+ * exists was recorded in the app's base currency, and null says exactly that. Writing
+ * today's base into every row instead would be a guess that goes wrong for anyone who
+ * set their base on a fresh install and would have to be re-guessed if the base ever
+ * moved again. See [EventEntity.currency].
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `events` ADD COLUMN `currencyCode` TEXT")
     }
 }
 

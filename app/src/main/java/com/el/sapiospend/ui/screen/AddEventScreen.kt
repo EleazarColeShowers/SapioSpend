@@ -36,13 +36,18 @@ import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.domain.template.CustomPlan
 import com.el.sapiospend.domain.template.EventTypes
 import com.el.sapiospend.ui.component.PeriodCalendarDialog
+import com.el.sapiospend.ui.component.CurrencyPicker
 import com.el.sapiospend.ui.component.ProBadge
 import com.el.sapiospend.ui.theme.AppColors
+import com.el.sapiospend.domain.budget.BudgetDirection
+import com.el.sapiospend.ui.text.BudgetWords
 import com.el.sapiospend.util.DateUtils
 import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatPeriod
 import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.settings.BudgetMoney
 
 /**
  * Period shortcuts. A salary earner wants "this month" in one tap; everyone else wants a
@@ -79,7 +84,20 @@ data class NewEventInput(
     val customLines: List<CategoryAmount>,
     val startDate: Long?,
     val endDate: Long?,
-    val guestCount: Int?
+    val guestCount: Int?,
+    /**
+     * Taken from the chosen template, and independent of whether that template's
+     * allocations actually get written — a savings goal created without its breakdown is
+     * still a savings goal, and calling its contributions expenses would be the same bug
+     * in a quieter place.
+     */
+    val direction: BudgetDirection,
+    /**
+     * The currency [budget] and [customLines] are in, and the one this budget will be
+     * kept in from now on. Always set here, unlike on the entity, where null means a
+     * budget created before budgets had a currency of their own.
+     */
+    val currencyCode: String
 )
 
 @Composable
@@ -98,6 +116,10 @@ fun AddEventScreen(
     var eventName by remember { mutableStateOf("") }
     var budget by remember { mutableStateOf("") }
     var guests by remember { mutableStateOf("") }
+    // Defaults to what the user is already reading the app in, which is the currency
+    // somebody opening the wizard is nearly always planning in. It is a per-budget
+    // choice from here: a naira salary month and a dollar savings goal are both normal.
+    var currency by remember { mutableStateOf(ActiveCurrency.value) }
     var periodPreset by remember { mutableStateOf(PeriodPreset.NONE) }
     var periodStart by remember { mutableStateOf<Long?>(null) }
     var periodEnd by remember { mutableStateOf<Long?>(null) }
@@ -105,6 +127,13 @@ fun AddEventScreen(
 
     val focusManager = LocalFocusManager.current
     val isPersonal = selectedType == EventTypes.PERSONAL
+
+    // Which way this budget's money moves, decided by the template and not by the type.
+    // A written-your-own plan is money going out: the custom editor asks what you intend
+    // to spend. Only a template can say otherwise.
+    val direction =
+        if (isCustomPlan) BudgetDirection.DEFAULT
+        else selectedTemplate?.direction ?: BudgetDirection.DEFAULT
 
     // A personal budget without a month is just a number that never resets, so picking
     // the type pre-selects the current month. Only when the user hasn't chosen a period
@@ -119,10 +148,11 @@ fun AddEventScreen(
         }
     }
 
-    // In the base currency from here on, so it can be compared against the planned
-    // total — which [CustomPlan] parses the same way — and saved without a second
-    // conversion step that could be forgotten.
-    val budgetValue = budget.parseAmount() ?: 0.0
+    // Everything typed in this wizard is in the budget's own currency and is stored in
+    // it untouched, so the figures here need no conversion at all — they only have to
+    // agree with each other, and with what [CustomPlan] parses out of the category rows.
+    val money = BudgetMoney(currency = currency, display = ActiveCurrency.value, rates = ActiveRates.value)
+    val budgetValue = budget.parseAmount(money) ?: 0.0
     val canSave = eventName.isNotBlank() && budgetValue > 0
 
     val templates = remember(selectedType) { BudgetTemplates.forEventType(selectedType) }
@@ -330,9 +360,16 @@ fun AddEventScreen(
                             value = budget,
                             onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) budget = v },
                             label = {
+                                // Take-home pay is the right question for exactly one
+                                // template — the monthly budget, whose total is a month's
+                                // income being divided up. Asking it of the other
+                                // personal templates was asking a laptop fund what the
+                                // user earns, and asking a savings goal for pay when the
+                                // screen after it calls the same figure a target.
                                 Text(
-                                    if (isPersonal) stringResource(R.string.field_take_home_pay, ActiveCurrency.value.symbol)
-                                    else stringResource(R.string.field_total, ActiveCurrency.value.symbol)
+                                    if (selectedTemplate?.id == BudgetTemplates.MONTHLY_SALARY_ID)
+                                        stringResource(R.string.field_take_home_pay, currency.symbol)
+                                    else stringResource(BudgetWords.of(direction).totalField, currency.symbol)
                                 )
                             },
                             placeholder = { Text("e.g. 100000") },
@@ -348,6 +385,13 @@ fun AddEventScreen(
                             } else null
                         )
 
+                        CurrencyPicker(
+                            selected = currency,
+                            display = ActiveCurrency.value,
+                            rates = ActiveRates.value,
+                            onSelect = { currency = it }
+                        )
+
                         // Only for an event: a salary budget has no guests, and a
                         // cost-per-head figure on one would be nonsense.
                         if (!isPersonal) {
@@ -359,7 +403,7 @@ fun AddEventScreen(
                                 supportingText = {
                                     Text(
                                         guests.toIntOrNull()?.takeIf { it > 0 && budgetValue > 0 }
-                                            ?.let { "${(budgetValue / it).formatMoney()} per guest" }
+                                            ?.let { "${(budgetValue / it).formatMoney(money)} per guest" }
                                             ?: "Unlocks cost per head on the analytics screen",
                                         color = AppColors.Secondary,
                                         fontSize = 11.sp
@@ -441,6 +485,7 @@ fun AddEventScreen(
                             CustomPlanEditor(
                                 categories = customCategories,
                                 budgetValue = budgetValue,
+                                money = money,
                                 fieldColors = fieldColors,
                                 onChange = { customCategories = it },
                                 onUseTotalAsBudget = { total ->
@@ -448,7 +493,7 @@ fun AddEventScreen(
                                 }
                             )
                         } else {
-                            TemplatePreview(template = selectedTemplate, budgetValue = budgetValue)
+                            TemplatePreview(template = selectedTemplate, budgetValue = budgetValue, money = money)
                         }
 
                         Button(
@@ -459,14 +504,16 @@ fun AddEventScreen(
                                         budget = budgetValue,
                                         eventType = selectedType,
                                         template = selectedTemplate,
-                                        customLines = if (isCustomPlan) CustomPlan.linesOf(customCategories) else emptyList(),
+                                        customLines = if (isCustomPlan) CustomPlan.linesOf(customCategories, money) else emptyList(),
                                         startDate = periodStart,
                                         endDate = periodEnd,
                                         // Blank stays null rather than becoming zero: an
                                         // uncounted event and an event for nobody are
                                         // different, and only one of them has a cost per
                                         // head worth showing.
-                                        guestCount = guests.toIntOrNull()?.takeIf { it > 0 }
+                                        guestCount = guests.toIntOrNull()?.takeIf { it > 0 },
+                                        direction = direction,
+                                        currencyCode = currency.code
                                     )
                                 )
                             },
@@ -561,7 +608,7 @@ private fun ChoiceRow(
 
 /** The breakdown a template would write, priced against whatever budget has been typed. */
 @Composable
-private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double) {
+private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double, money: BudgetMoney) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("STARTING BREAKDOWN", color = AppColors.Secondary, fontSize = 12.sp, letterSpacing = 0.5.sp)
 
@@ -589,7 +636,7 @@ private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(allocation.category, color = AppColors.Secondary, fontSize = 12.sp)
                     Text(
-                        allocation.amount.formatMoney(),
+                        allocation.amount.formatMoney(money),
                         color = AppColors.OnSurface,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -612,11 +659,12 @@ private fun TemplatePreview(template: BudgetTemplate?, budgetValue: Double) {
 private fun CustomPlanEditor(
     categories: List<CustomCategoryInput>,
     budgetValue: Double,
+    money: BudgetMoney,
     fieldColors: TextFieldColors,
     onChange: (List<CustomCategoryInput>) -> Unit,
     onUseTotalAsBudget: (Double) -> Unit
 ) {
-    val planned = CustomPlan.plannedTotal(categories)
+    val planned = CustomPlan.plannedTotal(categories, money)
     val unallocated = budgetValue - planned
     val overBudget = unallocated < 0
 
@@ -699,12 +747,12 @@ private fun CustomPlanEditor(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Allocated", color = AppColors.Secondary, fontSize = 13.sp)
-                Text(planned.formatMoney(), color = AppColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(planned.formatMoney(money), color = AppColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (overBudget) "Over budget by" else "Remaining", color = AppColors.Secondary, fontSize = 13.sp)
                 Text(
-                    kotlin.math.abs(unallocated).formatMoney(),
+                    kotlin.math.abs(unallocated).formatMoney(money),
                     color = if (overBudget) AppColors.Danger else AppColors.Success,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -717,7 +765,7 @@ private fun CustomPlanEditor(
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
-                        stringResource(R.string.create_use_planned_total, planned.formatMoney()),
+                        stringResource(R.string.create_use_planned_total, planned.formatMoney(money)),
                         color = AppColors.Black,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium

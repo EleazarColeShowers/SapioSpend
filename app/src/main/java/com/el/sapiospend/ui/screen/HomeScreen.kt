@@ -34,12 +34,18 @@ import com.el.sapiospend.billing.FreePlanLimits
 import com.el.sapiospend.export.ReportBuilder
 import com.el.sapiospend.ui.component.ExportMenu
 import com.el.sapiospend.ui.component.OverviewStat
+import com.el.sapiospend.ui.text.BudgetWords
 import com.el.sapiospend.ui.component.PaywallTrigger
 import com.el.sapiospend.ui.theme.AppColors
 import com.el.sapiospend.ui.viewmodel.EventViewModel
 import com.el.sapiospend.ui.viewmodel.ExportViewModel
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
+import com.el.sapiospend.settings.ActiveBase
+import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.settings.BudgetMoney
+import com.el.sapiospend.util.convertedTo
 import com.el.sapiospend.util.formatMoney
 
 @Composable
@@ -63,10 +69,28 @@ fun HomeScreen(
 
     val proUnlocked = PlanRules.proFeaturesUnlocked(plan)
 
-    val totalBudget = events.sumOf { it.budget }
-    val totalSpent = allExpenses.sumOf { it.amount }
+    // The overview card is a picture of money going out, so savings goals are left out
+    // of it: their total is a target rather than money in hand, and the gap between the
+    // two would be added to Remaining as though it were cash available to spend. They
+    // still get their own card in the list below, reading in their own words.
+    val spendingEvents = events.filterNot { it.isSavingsGoal }
+    val spendingIds = spendingEvents.mapTo(mutableSetOf()) { it.id }
+    // Budgets are each kept in their own currency, so these four figures convert every
+    // budget into the base currency before adding it in — a dollar goal and a naira
+    // month are not summable as they stand. Below, each card shows its own budget in its
+    // own currency, where no conversion happens at all.
+    val base = ActiveBase.value
+    val rates = ActiveRates.value
+    val currencyOf = events.associate { it.id to it.currency(base) }
+    fun Double.pooled(eventId: String) = convertedTo(base, currencyOf[eventId] ?: base, rates)
+
+    val totalBudget = spendingEvents.sumOf { it.budget.pooled(it.id) }
+    val spendingExpenses = allExpenses.filter { it.eventId in spendingIds }
+    val totalSpent = spendingExpenses.sumOf { it.amount.pooled(it.eventId) }
     val remaining = totalBudget - totalSpent
-    val outstanding = allExpenses.sumOf { it.outstanding }
+    val outstanding = spendingExpenses.sumOf { it.outstanding.pooled(it.eventId) }
+    /** Whether the overview is adding up budgets kept in different currencies. */
+    val mixedCurrencies = spendingEvents.any { currencyOf[it.id] != base }
 
     /**
      * Screen state, not ViewModel state: leaving Home should forget the query rather
@@ -125,7 +149,7 @@ fun HomeScreen(
                             isExporting = isExporting,
                             onExport = { format ->
                                 exportViewModel.export(
-                                    ReportBuilder.forAllEvents(events, allExpenses, budgetLines, contributions),
+                                    ReportBuilder.forAllEvents(events, allExpenses, budgetLines, contributions, base = base, rates = rates),
                                     format
                                 )
                             },
@@ -205,7 +229,9 @@ fun HomeScreen(
                             val spent = allExpenses.filter { it.eventId == event.id }.sumOf { it.amount }
                             ResultRow(
                                 title = event.name,
-                                subtitle = "${event.eventType} · ${spent.formatMoney()} of ${event.budget.formatMoney()}",
+                                subtitle = BudgetMoney.forCode(event.currencyCode).let { m ->
+                                    "${event.eventType} · ${spent.formatMoney(m)} of ${event.budget.formatMoney(m)}"
+                                },
                                 trailing = null,
                                 onClick = { onEventClick(event.id) }
                             )
@@ -226,6 +252,9 @@ fun HomeScreen(
                             )
                         }
                         items(results.expenses, key = { "expense-" + it.expense.id }) { hit ->
+                            // An expense is written in the currency of the budget it was
+                            // logged against, not in whichever one the search is run from.
+                            val hitMoney = BudgetMoney.forCode(currencyOf[hit.eventId]?.code)
                             ResultRow(
                                 title = hit.expense.title,
                                 subtitle = buildString {
@@ -233,9 +262,9 @@ fun HomeScreen(
                                     append(" · ")
                                     append(hit.expense.category)
                                     if (hit.expense.vendor.isNotBlank()) append(" · ${hit.expense.vendor}")
-                                    if (!hit.expense.isSettled) append(" · ${hit.expense.outstanding.formatMoney()} owing")
+                                    if (!hit.expense.isSettled) append(" · ${hit.expense.outstanding.formatMoney(hitMoney)} owing")
                                 },
-                                trailing = hit.expense.amount.formatMoney(),
+                                trailing = hit.expense.amount.formatMoney(hitMoney),
                                 onClick = { onExpenseClick(hit.expense.id) }
                             )
                         }
@@ -328,6 +357,14 @@ fun HomeScreen(
                                 if (outstanding > 0) {
                                     append(stringResource(R.string.home_still_to_pay, outstanding.formatMoney()))
                                 }
+                                // Said once, here, rather than marked on every figure:
+                                // these four numbers are the only place in the app where
+                                // budgets kept in different currencies are added
+                                // together, and a total that quietly converted would be
+                                // a total nobody could reconcile against the cards below.
+                                if (mixedCurrencies) {
+                                    append(stringResource(R.string.home_mixed_currencies, ActiveCurrency.value.code))
+                                }
                             },
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 11.sp
@@ -376,10 +413,14 @@ fun HomeScreen(
                     )
                 }
                 items(events) { event ->
+                    // One budget, one currency: nothing on this card is converted.
+                    val money = BudgetMoney.forCode(event.currencyCode)
                     val eventSpent = allExpenses.filter { it.eventId == event.id }.sumOf { it.amount }
                     val eventRemaining = event.budget - eventSpent
                     val progress = if (event.budget > 0) (eventSpent / event.budget).toFloat().coerceIn(0f, 1f) else 0f
-                    val overBudget = eventSpent > event.budget
+                    val words = BudgetWords.of(event.direction)
+                    // Passing the total is a failure on a budget and the point of a goal.
+                    val overBudget = eventSpent > event.budget && !event.isSavingsGoal
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
@@ -425,11 +466,11 @@ fun HomeScreen(
                             }
 
                             Row(Modifier.fillMaxWidth()) {
-                                MiniStat(stringResource(R.string.label_total), event.budget.formatMoney(), Modifier.weight(1f))
-                                MiniStat(stringResource(R.string.label_spent), eventSpent.formatMoney(), Modifier.weight(1f))
+                                MiniStat(stringResource(words.total), event.budget.formatMoney(money), Modifier.weight(1f))
+                                MiniStat(stringResource(words.spent), eventSpent.formatMoney(money), Modifier.weight(1f))
                                 MiniStat(
-                                    stringResource(R.string.label_left),
-                                    eventRemaining.formatMoney(),
+                                    stringResource(words.left),
+                                    eventRemaining.coerceAtLeast(0.0).formatMoney(money),
                                     Modifier.weight(1f),
                                     valueColor = if (overBudget) AppColors.Danger else AppColors.Success
                                 )

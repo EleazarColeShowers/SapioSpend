@@ -1,5 +1,8 @@
 package com.el.sapiospend
 
+import com.el.sapiospend.fake.TEST_MONEY
+import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.FxRates
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.el.sapiospend.billing.Entitlements
 import com.el.sapiospend.billing.FreePlanLimits
@@ -414,6 +417,8 @@ class EventViewModelTest {
                 CustomCategoryInput(name = "Photography", amount = "800000"),
                 CustomCategoryInput(name = "", amount = "")
             )
+        ,
+            TEST_MONEY
         )
         advanceUntilIdle()
 
@@ -439,6 +444,8 @@ class EventViewModelTest {
         viewModel.savePlan(
             eventId,
             listOf(CustomCategoryInput(id = original.id, name = "Catering", amount = "3500000"))
+        ,
+            TEST_MONEY
         )
         advanceUntilIdle()
 
@@ -466,6 +473,8 @@ class EventViewModelTest {
         viewModel.savePlan(
             eventId,
             listOf(CustomCategoryInput(id = catering.id, name = "Catering", amount = "3000000"))
+        ,
+            TEST_MONEY
         )
         advanceUntilIdle()
 
@@ -775,6 +784,72 @@ class EventViewModelTest {
         assertTrue(rule.active)
         assertTrue("the next charge belongs in the future", rule.nextDueDate > System.currentTimeMillis())
         assertEquals("switching a rule back on is not a bill", chargedWhilePaused, db.expenses.value.size)
+    }
+
+    // --- Moving a budget to another currency ----------------------------------------
+
+    @Test
+    fun `changing a budget's currency converts everything it owns`() = runTest {
+        val rates = FxRates(
+            perUsd = mapOf("USD" to 1.0, "NGN" to 1000.0),
+            asOf = 0L,
+            source = FxRates.Source.BUNDLED
+        )
+        viewModel.addEvent("Laptop Fund", 1_000_000.0, currencyCode = AppCurrency.NGN.code)
+        val event = db.events.value.single()
+        viewModel.addExpense(event.id, "Deposit", "Savings", 200_000.0, amountPaid = 50_000.0)
+        viewModel.savePlan(
+            event.id,
+            listOf(CustomCategoryInput(name = "Savings", amount = "800000")),
+            TEST_MONEY
+        )
+        viewModel.addContribution(event.id, "Bonus", 300_000.0)
+        viewModel.addRecurringRule(
+            eventId = event.id,
+            title = "Monthly transfer",
+            category = "Savings",
+            amount = 100_000.0,
+            recurrence = Recurrence.MONTHLY,
+            startDate = System.currentTimeMillis()
+        )
+        advanceUntilIdle()
+
+        // The total arrives already in the new currency: the edit dialog showed the user
+        // the converted figure and let them correct it before they confirmed.
+        viewModel.updateEvent(
+            db.events.value.single().copy(budget = 1_000.0, currencyCode = AppCurrency.USD.code),
+            convertFrom = AppCurrency.NGN,
+            rates = rates
+        )
+        advanceUntilIdle()
+
+        val moved = db.events.value.single()
+        assertEquals(AppCurrency.USD.code, moved.currencyCode)
+        assertEquals(1_000.0, moved.budget, 0.01)
+        // Everything hanging off it moved with it. A budget whose total became dollars
+        // while its expenses stayed naira would report a two-hundred-thousand-percent
+        // overspend.
+        val expense = db.expenses.value.single { it.title == "Deposit" }
+        assertEquals(200.0, expense.amount, 0.01)
+        assertEquals(50.0, expense.amountPaid, 0.01)
+        assertEquals(800.0, db.budgetLines.value.single().plannedAmount, 0.01)
+        assertEquals(300.0, db.contributions.value.single().amount, 0.01)
+        assertEquals(100.0, db.recurringRules.value.single().amount, 0.01)
+    }
+
+    @Test
+    fun `an ordinary edit leaves every figure alone`() = runTest {
+        viewModel.addEvent("August Salary", 600_000.0, currencyCode = AppCurrency.NGN.code)
+        val event = db.events.value.single()
+        viewModel.addExpense(event.id, "Rent", "Rent & Utilities", 250_000.0)
+        advanceUntilIdle()
+
+        viewModel.updateEvent(db.events.value.single().copy(name = "September Salary"))
+        advanceUntilIdle()
+
+        assertEquals("September Salary", db.events.value.single().name)
+        assertEquals(600_000.0, db.events.value.single().budget, 0.0)
+        assertEquals(250_000.0, db.expenses.value.single().amount, 0.0)
     }
 
 }

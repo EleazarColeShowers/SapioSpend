@@ -5,6 +5,8 @@ import com.el.sapiospend.data.local.ContributionEntity
 import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
+import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.FxRates
 import com.el.sapiospend.domain.analytics.EventAnalytics
 import com.el.sapiospend.domain.analytics.PortfolioAnalytics
 
@@ -39,9 +41,11 @@ object ReportBuilder {
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
         contributions: List<ContributionEntity> = emptyList(),
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        /** What a budget with no currency of its own is denominated in. */
+        base: AppCurrency = AppCurrency.DEFAULT
     ): BudgetReport {
-        val analytics = BudgetAnalytics.forEvent(event, expenses, budgetLines, contributions, now)
+        val analytics = BudgetAnalytics.forEvent(event, expenses, budgetLines, contributions, now, base)
         return BudgetReport(
             title = event.name,
             generatedAt = now,
@@ -61,9 +65,11 @@ object ReportBuilder {
         expenses: List<ExpenseEntity>,
         budgetLines: List<BudgetLineEntity>,
         contributions: List<ContributionEntity> = emptyList(),
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        base: AppCurrency = AppCurrency.DEFAULT,
+        rates: FxRates = FxRates.BUNDLED
     ): BudgetReport {
-        val portfolio = BudgetAnalytics.portfolio(events, expenses, budgetLines, contributions, now)
+        val portfolio = BudgetAnalytics.portfolio(events, expenses, budgetLines, contributions, now, base, rates)
         return BudgetReport(
             title = "All Events",
             generatedAt = now,

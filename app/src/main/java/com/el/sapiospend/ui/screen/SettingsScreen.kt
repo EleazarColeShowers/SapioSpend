@@ -43,6 +43,14 @@ fun SettingsScreen(
     onCurrencyChange: (AppCurrency) -> Unit,
     /** The currency the stored figures are in — what the preview converts *from*. */
     baseCurrency: AppCurrency = currency,
+    /**
+     * Whether anything has been saved yet, which is what decides how many currencies
+     * this screen is really choosing. With nothing stored the picker sets both roles at
+     * once; after that the recording currency is frozen and it sets only the display.
+     * The screen has to say which of the two it is doing, or the same list silently
+     * means different things on different days.
+     */
+    hasData: Boolean = true,
     rates: FxRates = FxRates.BUNDLED,
     /** Returns whether anything newer actually arrived. */
     onRefreshRates: suspend () -> Boolean = { false },
@@ -50,7 +58,9 @@ fun SettingsScreen(
     onNotificationsChange: (NotificationPrefs) -> Unit,
     /** False when the user has never been asked, or has said no. */
     notificationsAllowed: Boolean = true,
-    onRequestNotificationPermission: () -> Unit = {}
+    onRequestNotificationPermission: () -> Unit = {},
+    /** Replays the first-run tour, for anyone who skipped it and wished they had not. */
+    onShowTour: () -> Unit = {}
 ) {
     /**
      * Switching a notification on is the moment to ask for permission — the user has just
@@ -123,16 +133,39 @@ fun SettingsScreen(
                         fontSize = 11.sp,
                         letterSpacing = 0.5.sp
                     )
-                    // Both halves said plainly, because either one alone is the
-                    // misunderstanding: that nothing converts, or that the figures
-                    // themselves were rewritten and the originals are gone.
+                    // Two jobs, named separately. One list appearing to control every
+                    // figure in the app is the whole confusion: a user who thinks
+                    // picking dollars re-denominates their budgets, and a user who
+                    // thinks it changes nothing, are both reading the same screen.
                     Text(
-                        "Amounts are converted into the currency you pick. What you recorded is " +
-                            "kept in ${baseCurrency.displayName} and never changed — switch back and " +
-                            "your figures are exactly as you typed them.",
+                        "Each budget is kept in its own currency — the one you pick when you " +
+                            "create it — and its own screens always read in it, to the kobo. " +
+                            "A naira salary month and a dollar savings goal are both normal.",
                         color = AppColors.Secondary,
                         fontSize = 12.sp
                     )
+                    Text(
+                        if (hasData)
+                            "This list is what the app reads in: ${currency.displayName} " +
+                                "(${currency.code}). It sets what new budgets start in, and the " +
+                                "currency Home and Insights add your budgets up in when they are " +
+                                "not all kept in the same one."
+                        else
+                            "Nothing is saved yet, so the currency you pick below becomes the one " +
+                                "your first budgets start in as well as the one totals are shown in.",
+                        color = AppColors.Secondary,
+                        fontSize = 12.sp
+                    )
+                    if (hasData && converting) {
+                        Text(
+                            "Figures recorded before budgets had their own currency are in " +
+                                "${baseCurrency.displayName} (${baseCurrency.code}) and are " +
+                                "converted for display only — switch back and they are exactly " +
+                                "as you typed them.",
+                            color = AppColors.Secondary,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
 
@@ -186,6 +219,15 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                Text(
+                    if (hasData) "READ AMOUNTS IN" else "RECORD AND READ AMOUNTS IN",
+                    color = AppColors.Secondary,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
             items(AppCurrency.entries, key = { it.code }) { option ->
                 val selected = option == currency
                 Card(
@@ -233,7 +275,7 @@ fun SettingsScreen(
                             // with the number in front of you rather than after tapping
                             // it and reading your budget back differently.
                             Text(
-                                if (option == baseCurrency) "${option.code} · what your figures are recorded in"
+                                if (option == baseCurrency) "${option.code} · what older budgets are recorded in"
                                 else "${option.code} · ${rates.unitRate(option, baseCurrency).formatMoney(baseCurrency, from = baseCurrency, rates = rates)} per ${option.symbol}1",
                                 color = AppColors.Secondary,
                                 fontSize = 12.sp
@@ -337,6 +379,44 @@ fun SettingsScreen(
                         labelOf = ::hourLabel,
                         onSelect = { update(notifications.copy(hourOfDay = it)) }
                     )
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "HELP",
+                    color = AppColors.Secondary,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onShowTour),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.tour_replay),
+                            color = AppColors.OnSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            stringResource(R.string.tour_replay_sub),
+                            color = AppColors.Secondary,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }

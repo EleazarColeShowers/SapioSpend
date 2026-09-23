@@ -7,6 +7,8 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.el.sapiospend.domain.payment.Payments
 import com.el.sapiospend.util.formatDate
+import com.el.sapiospend.settings.ActiveRates
+import com.el.sapiospend.settings.MoneyStyle
 import com.el.sapiospend.util.formatMoney
 import com.el.sapiospend.util.formatPeriod
 import java.io.OutputStream
@@ -72,13 +74,18 @@ object PdfReportWriter {
             }
             if (portfolio.totalReceived > 0 || portfolio.totalPledged > 0) {
                 cursor.keyValue("Funding received", portfolio.totalReceived.formatMoney())
-                if (portfolio.totalPledged > 0) cursor.keyValue("Pledged", portfolio.totalPledged.formatMoney())
+                if (portfolio.totalPledged > 0) cursor.keyValue("Promised", portfolio.totalPledged.formatMoney())
             }
             cursor.keyValue("Events", "${portfolio.eventCount} (${portfolio.overBudgetCount} over budget)")
         }
 
         report.sections.forEach { section ->
             val a = section.analytics
+            // One budget per section, written in the currency that budget is kept in —
+            // the same figures its screens show, so an exported report and the app
+            // cannot disagree. The portfolio summary above is the exception: it pools
+            // budgets, so it is already in the base currency and formatted app-wide.
+            val money = MoneyStyle(a.currency, a.currency, ActiveRates.value)
 
             cursor.rule(gapBefore = 16f)
             cursor.text(a.eventName, headingPaint, gapBefore = 12f)
@@ -88,30 +95,30 @@ object PdfReportWriter {
                 gapBefore = 4f
             )
 
-            cursor.keyValue("Budget", a.budget.formatMoney(), gapBefore = 10f)
-            cursor.keyValue("Planned", a.totalPlanned.formatMoney())
-            cursor.keyValue("Spent", a.totalSpent.formatMoney())
+            cursor.keyValue("Budget", a.budget.formatMoney(money), gapBefore = 10f)
+            cursor.keyValue("Planned", a.totalPlanned.formatMoney(money))
+            cursor.keyValue("Spent", a.totalSpent.formatMoney(money))
             cursor.keyValue(
                 "Remaining",
-                a.remaining.formatMoney(),
+                a.remaining.formatMoney(money),
                 valuePaint = if (a.isOverBudget) dangerPaint else bodyBoldPaint
             )
-            cursor.keyValue("Daily burn rate", a.dailyBurnRate.formatMoney())
+            cursor.keyValue("Daily burn rate", a.dailyBurnRate.formatMoney(money))
 
             // The committed-versus-paid pair, which is what a client asking "what is
             // still owed" is actually asking. Left off entirely when everything is
             // settled — a row of zeroes is noise on a one-page summary.
             if (a.outstanding > 0) {
-                cursor.keyValue("Paid so far", a.totalPaid.formatMoney())
+                cursor.keyValue("Paid so far", a.totalPaid.formatMoney(money))
                 cursor.keyValue(
                     "Still owed",
-                    a.outstanding.formatMoney(),
+                    a.outstanding.formatMoney(money),
                     valuePaint = if (a.payments.overdueCount > 0) dangerPaint else bodyBoldPaint
                 )
                 if (a.payments.overdueCount > 0) {
                     cursor.keyValue(
                         "Overdue",
-                        "${a.payments.overdueAmount.formatMoney()} across ${plural(a.payments.overdueCount, "payment")}",
+                        "${a.payments.overdueAmount.formatMoney(money)} across ${plural(a.payments.overdueCount, "payment")}",
                         valuePaint = dangerPaint
                     )
                 }
@@ -120,15 +127,15 @@ object PdfReportWriter {
 
             a.guestCount?.takeIf { it > 0 }?.let { guests ->
                 cursor.keyValue("Guests", "$guests")
-                a.costPerGuest?.let { cursor.keyValue("Cost per guest", it.formatMoney()) }
+                a.costPerGuest?.let { cursor.keyValue("Cost per guest", it.formatMoney(money)) }
             }
 
             if (a.funding.total > 0) {
-                cursor.keyValue("Funding received", a.funding.received.formatMoney())
-                if (a.funding.pledged > 0) cursor.keyValue("Pledged, not yet in", a.funding.pledged.formatMoney())
+                cursor.keyValue("Funding received", a.funding.received.formatMoney(money))
+                if (a.funding.pledged > 0) cursor.keyValue("Promised, not yet in", a.funding.pledged.formatMoney(money))
                 cursor.keyValue(
                     "Cash position",
-                    a.cashPosition.formatMoney(),
+                    a.cashPosition.formatMoney(money),
                     valuePaint = if (a.cashPosition < 0) dangerPaint else bodyBoldPaint
                 )
             }
@@ -136,11 +143,11 @@ object PdfReportWriter {
             // Period figures only for a dated budget — see EventAnalytics.hasPeriod.
             formatPeriod(a.periodStart, a.periodEnd)?.let { cursor.keyValue("Period", it) }
             a.daysRemaining?.let { cursor.keyValue("Days remaining", "$it") }
-            a.safeDailySpend?.let { cursor.keyValue("Safe daily spend", maxOf(it, 0.0).formatMoney()) }
+            a.safeDailySpend?.let { cursor.keyValue("Safe daily spend", maxOf(it, 0.0).formatMoney(money)) }
             a.projectedTotalSpend?.let {
                 cursor.keyValue(
                     "Projected at this pace",
-                    it.formatMoney(),
+                    it.formatMoney(money),
                     valuePaint = if (a.projectedOverspend != null) dangerPaint else bodyBoldPaint
                 )
             }
@@ -153,9 +160,9 @@ object PdfReportWriter {
                     cursor.tableRow(
                         listOf(
                             category.category,
-                            category.planned.formatMoney(),
-                            category.actual.formatMoney(),
-                            category.variance.formatMoney()
+                            category.planned.formatMoney(money),
+                            category.actual.formatMoney(money),
+                            category.variance.formatMoney(money)
                         ),
                         if (category.isOverPlan) dangerPaint else bodyPaint,
                         gapBefore = 6f
@@ -174,7 +181,7 @@ object PdfReportWriter {
                             expense.dateCreated.formatDate(),
                             expense.title,
                             expense.category,
-                            expense.amount.formatMoney(),
+                            expense.amount.formatMoney(money),
                             if (overdue) "Overdue" else Payments.statusOf(expense).label
                         ),
                         if (overdue) dangerPaint else bodyPaint,
@@ -192,8 +199,8 @@ object PdfReportWriter {
                         listOf(
                             (contribution.receivedAt ?: contribution.dateCreated).formatDate(),
                             contribution.source,
-                            if (contribution.isReceived) "Received" else "Pledged",
-                            contribution.amount.formatMoney()
+                            if (contribution.isReceived) "Received" else "Promised",
+                            contribution.amount.formatMoney(money)
                         ),
                         bodyPaint,
                         gapBefore = 6f

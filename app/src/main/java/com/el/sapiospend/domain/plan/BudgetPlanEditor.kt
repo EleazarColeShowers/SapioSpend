@@ -3,6 +3,7 @@ package com.el.sapiospend.domain.plan
 import com.el.sapiospend.data.local.BudgetLineEntity
 import com.el.sapiospend.domain.template.CustomCategoryInput
 import com.el.sapiospend.domain.template.CustomPlan
+import com.el.sapiospend.settings.BudgetMoney
 import com.el.sapiospend.util.formatAmountInput
 import com.el.sapiospend.util.parseAmount
 
@@ -36,9 +37,9 @@ object BudgetPlanEditor {
      * reviewing a budget reads it in, and stable for as long as the screen is open
      * because it is computed once on load rather than re-sorted as amounts are typed.
      */
-    fun rowsFrom(lines: List<BudgetLineEntity>): List<CustomCategoryInput> =
+    fun rowsFrom(lines: List<BudgetLineEntity>, money: BudgetMoney): List<CustomCategoryInput> =
         lines.sortedByDescending { it.plannedAmount }
-            .map { CustomCategoryInput(id = it.id, name = it.category, amount = it.plannedAmount.formatAmountInput()) }
+            .map { CustomCategoryInput(id = it.id, name = it.category, amount = it.plannedAmount.formatAmountInput(money)) }
 
     /**
      * What the rows on screen mean for storage.
@@ -53,11 +54,12 @@ object BudgetPlanEditor {
         eventId: String,
         rows: List<CustomCategoryInput>,
         existing: List<BudgetLineEntity>,
+        money: BudgetMoney,
         now: Long = System.currentTimeMillis()
     ): PlanEdit {
         val kept = rows.mapNotNull { row ->
             val name = row.name.trim()
-            val amount = row.amount.parseAmount() ?: 0.0
+            val amount = row.amount.parseAmount(money) ?: 0.0
             if (name.isEmpty() || amount <= 0) return@mapNotNull null
             BudgetLineEntity(
                 id = row.id,
@@ -75,9 +77,9 @@ object BudgetPlanEditor {
     }
 
     /** What the rows currently add up to — the figure checked against the total budget. */
-    fun plannedTotal(rows: List<CustomCategoryInput>): Double =
+    fun plannedTotal(rows: List<CustomCategoryInput>, money: BudgetMoney): Double =
         rows.sumOf { row ->
-            if (row.name.isBlank()) 0.0 else (row.amount.parseAmount() ?: 0.0).coerceAtLeast(0.0)
+            if (row.name.isBlank()) 0.0 else (row.amount.parseAmount(money) ?: 0.0).coerceAtLeast(0.0)
         }
 
     /**

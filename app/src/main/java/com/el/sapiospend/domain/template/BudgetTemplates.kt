@@ -1,5 +1,7 @@
 package com.el.sapiospend.domain.template
 
+import com.el.sapiospend.domain.budget.BudgetDirection
+
 /**
  * The starter template catalogue, grouped by the event type each template belongs to.
  *
@@ -18,6 +20,13 @@ package com.el.sapiospend.domain.template
  */
 object BudgetTemplates {
 
+    /**
+     * The one template whose total is money arriving rather than money set aside, which
+     * is why the create screen can ask it for take-home pay. Referenced by id because
+     * that is the only thing about a template that outlives the picker.
+     */
+    const val MONTHLY_SALARY_ID = "monthly_salary"
+
     val all: List<BudgetTemplate> = listOf(
 
         // --- Personal ---------------------------------------------------------------
@@ -25,7 +34,7 @@ object BudgetTemplates {
         // monthly template every month, where a planner applies a wedding template once
         // per client. The rest are one-off things people save towards.
         BudgetTemplate(
-            id = "monthly_salary",
+            id = MONTHLY_SALARY_ID,
             name = "Monthly Budget",
             eventType = EventTypes.PERSONAL,
             description = "A month of take-home pay across essentials, savings and the rest",
@@ -45,17 +54,18 @@ object BudgetTemplates {
             id = "savings_goal",
             name = "Savings Goal",
             eventType = EventTypes.PERSONAL,
-            // The one template whose budget is money coming in rather than going out.
-            // Categories are sources, so logging a "spend" against one records a
-            // contribution and the remaining figure reads as how far short of the target
-            // you still are.
+            // The one template whose budget is money coming in rather than going out,
+            // which is what BudgetDirection.SAVING tells the rest of the app. Categories
+            // are sources, every entry is a contribution, and the remaining figure reads
+            // as how far short of the target you still are.
             description = "A target amount broken down by where the money will come from",
             allocations = listOf(
                 TemplateAllocation("Monthly Contribution", 0.65),
                 TemplateAllocation("Side Income", 0.15),
                 TemplateAllocation("Bonus & Windfalls", 0.12),
                 TemplateAllocation("Returns & Interest", 0.08)
-            )
+            ),
+            direction = BudgetDirection.SAVING
         ),
         BudgetTemplate(
             id = "home_setup",

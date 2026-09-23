@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.el.sapiospend.billing.Plan
 import com.el.sapiospend.billing.PlanRules
 import com.el.sapiospend.data.local.ContributionEntity
+import com.el.sapiospend.data.local.EventEntity
 import com.el.sapiospend.data.local.ExpenseEntity
 import com.el.sapiospend.data.local.RecurringExpenseEntity
 import com.el.sapiospend.domain.analytics.BudgetAnalytics
@@ -51,7 +52,9 @@ import com.el.sapiospend.domain.template.EventTypes
 import com.el.sapiospend.R
 import com.el.sapiospend.export.ReportBuilder
 import com.el.sapiospend.ui.component.DayCalendarDialog
+import com.el.sapiospend.domain.budget.BudgetDirection
 import com.el.sapiospend.ui.component.ExportMenu
+import com.el.sapiospend.ui.text.BudgetWords
 import com.el.sapiospend.ui.component.OverviewStat
 import com.el.sapiospend.ui.component.PeriodCalendarDialog
 import com.el.sapiospend.ui.component.PlannedVsActualChart
@@ -65,8 +68,13 @@ import com.el.sapiospend.util.formatAmountInput
 import com.el.sapiospend.util.parseAmount
 import com.el.sapiospend.util.formatDate
 import com.el.sapiospend.util.formatPeriod
+import com.el.sapiospend.util.formatConverted
 import com.el.sapiospend.util.formatMoney
+import com.el.sapiospend.settings.ActiveBase
 import com.el.sapiospend.settings.ActiveCurrency
+import com.el.sapiospend.settings.AppCurrency
+import com.el.sapiospend.settings.BudgetMoney
+import com.el.sapiospend.ui.component.CurrencyPicker
 
 @Composable
 fun EventDetailScreen(
@@ -112,12 +120,31 @@ fun EventDetailScreen(
     val budget = event?.budget ?: 0.0
     val remaining = budget - totalSpent
     val progress = if (budget > 0) (totalSpent / budget).toFloat().coerceIn(0f, 1f) else 0f
-    val overBudget = totalSpent > budget
+
+    /**
+     * The words this budget is described in. A savings goal is not spending money, so
+     * every label on this screen that says so comes from here instead of from a literal.
+     */
+    val words = BudgetWords.of(event?.direction ?: BudgetDirection.DEFAULT)
+    val saving = words == BudgetWords.SAVING
+
+    /**
+     * The currency this budget is kept in, and how to write it down.
+     *
+     * Every figure on this screen belongs to this one budget, so all of them are in this
+     * currency and none of them is converted — a $5,000 target reads as $5,000 for as
+     * long as it exists. Where the user is reading the rest of the app in something
+     * else, the overview carries a quieter converted line underneath.
+     */
+    val money = BudgetMoney.forCode(event?.currencyCode)
+
+    /** Passing the total is a failure on a budget and the whole point of a goal. */
+    val overBudget = totalSpent > budget && !saving
 
     // When the event was created from a template there are planned amounts to compare
     // against; otherwise this collapses to a plain actual-spend breakdown.
     val analytics = remember(event, allExpenses, allBudgetLines, allContributions) {
-        event?.let { BudgetAnalytics.forEvent(it, allExpenses, allBudgetLines, allContributions) }
+        event?.let { BudgetAnalytics.forEvent(it, allExpenses, allBudgetLines, allContributions, base = ActiveBase.value) }
     }
     val categories = analytics?.categories.orEmpty()
     val hasPlan = categories.any { it.planned > 0 }
@@ -134,6 +161,10 @@ fun EventDetailScreen(
     var editBudget by remember { mutableStateOf("") }
     var editGuests by remember { mutableStateOf("") }
     var editType by remember { mutableStateOf("Birthday") }
+    var editDirection by remember { mutableStateOf(BudgetDirection.DEFAULT) }
+    var editCurrency by remember { mutableStateOf(AppCurrency.DEFAULT) }
+    /** Set once the user has asked to save a currency change and has to confirm it. */
+    var pendingCurrencyChange by remember { mutableStateOf<EventEntity?>(null) }
     var editStart by remember { mutableStateOf<Long?>(null) }
     var editEnd by remember { mutableStateOf<Long?>(null) }
     var showPeriodPicker by remember { mutableStateOf(false) }
@@ -172,7 +203,7 @@ fun EventDetailScreen(
         AlertDialog(
             onDismissRequest = { expenseToDelete = null },
             containerColor = AppColors.Surface,
-            title = { Text("Delete Expense", color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
+            title = { Text(stringResource(words.deleteEntryTitle), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold) },
             text = { Text("Remove \"${pending.title}\"? This cannot be undone.", color = AppColors.Secondary) },
             confirmButton = {
                 TextButton(onClick = {
@@ -231,6 +262,7 @@ fun EventDetailScreen(
 
     if (showAddContribution) {
         AddContributionDialog(
+            money = money,
             onDismiss = { showAddContribution = false },
             onAdd = { source, amount, received ->
                 eventViewModel.addContribution(
@@ -246,6 +278,7 @@ fun EventDetailScreen(
 
     if (showAddRecurring) {
         AddRecurringDialog(
+            money = money,
             categories = (categories.map { it.category } + expenseCategories).distinct(),
             eventEnd = event.endDate,
             onDismiss = { showAddRecurring = false },
@@ -280,8 +313,57 @@ fun EventDetailScreen(
         )
     }
 
+    pendingCurrencyChange?.let { edited ->
+        val from = money.currency
+        val to = AppCurrency.fromCode(edited.currencyCode, from)
+        AlertDialog(
+            onDismissRequest = { pendingCurrencyChange = null },
+            containerColor = AppColors.Surface,
+            title = {
+                Text(
+                    stringResource(R.string.currency_convert_title),
+                    color = AppColors.OnSurface,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.currency_convert_message,
+                        edited.name,
+                        expenses.size,
+                        from.code,
+                        to.code,
+                        money.rates.unitRate(from, to).formatMoney(to, from = to, rates = money.rates)
+                    ),
+                    color = AppColors.Secondary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    eventViewModel.updateEvent(edited, convertFrom = from, rates = money.rates)
+                    pendingCurrencyChange = null
+                }) {
+                    Text(
+                        stringResource(R.string.currency_convert_confirm),
+                        color = AppColors.Danger,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCurrencyChange = null }) {
+                    Text("Cancel", color = AppColors.Secondary)
+                }
+            }
+        )
+    }
+
     if (showEditDialog) {
-        val editBudgetValue = editBudget.parseAmount() ?: 0.0
+        // Read in whatever the picker below currently says, which is what the field is
+        // labelled with — not in the currency the budget is still stored in.
+        val editBudgetValue = editBudget.parseAmount(money.copy(currency = editCurrency)) ?: 0.0
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             containerColor = AppColors.Surface,
@@ -305,13 +387,33 @@ fun EventDetailScreen(
                     OutlinedTextField(
                         value = editBudget,
                         onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) editBudget = v },
-                        label = { Text(stringResource(R.string.field_total, ActiveCurrency.value.symbol)) },
+                        label = { Text(stringResource(words.totalField, editCurrency.symbol)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {})
                     )
+                    CurrencyPicker(
+                        selected = editCurrency,
+                        display = ActiveCurrency.value,
+                        rates = money.rates,
+                        onSelect = { picked ->
+                            if (picked != editCurrency) {
+                                // The field is always read in the currency selected here,
+                                // so the figure in it moves with the choice. Without this
+                                // the user would watch "5000" stay put while the label
+                                // under it changed from dollars to naira and quietly mean
+                                // something a thousand times smaller.
+                                editBudget = (editBudget.parseAmount(money.copy(currency = editCurrency)) ?: 0.0)
+                                    .takeIf { it > 0 }
+                                    ?.let { money.rates.convert(it, editCurrency, picked).formatAmountInput(money.copy(currency = picked)) }
+                                    ?: editBudget
+                                editCurrency = picked
+                            }
+                        }
+                    )
+
                     OutlinedTextField(
                         value = editGuests,
                         onValueChange = { v -> if (v.all { it.isDigit() }) editGuests = v },
@@ -387,22 +489,71 @@ fun EventDetailScreen(
                             }
                         }
                     }
+
+                    // Direction is set by the template at creation, which leaves someone
+                    // who started from a blank page with no way to say a budget is a
+                    // savings goal — and someone who picked the savings template with no
+                    // way to undo it. It is two chips; it belongs here.
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(stringResource(R.string.direction_title), color = AppColors.Secondary, fontSize = 12.sp)
+                        BudgetDirection.entries.forEach { option ->
+                            val selected = editDirection == option
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selected) AppColors.Black else AppColors.BG
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { editDirection = option },
+                                elevation = CardDefaults.cardElevation(0.dp)
+                            ) {
+                                Column(
+                                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (option.isSaving) R.string.direction_saving
+                                            else R.string.direction_spending
+                                        ),
+                                        color = if (selected) Color.White else AppColors.OnSurface,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        stringResource(
+                                            if (option.isSaving) R.string.direction_saving_blurb
+                                            else R.string.direction_spending_blurb
+                                        ),
+                                        color = if (selected) Color.White.copy(alpha = 0.7f) else AppColors.Secondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         if (editName.isNotBlank() && editBudgetValue > 0) {
-                            eventViewModel.updateEvent(
-                                event.copy(
-                                    name = editName.trim(),
-                                    budget = editBudgetValue,
-                                    eventType = editType,
-                                    guestCount = editGuests.toIntOrNull()?.takeIf { it > 0 },
-                                    startDate = editStart,
-                                    endDate = editEnd
-                                )
+                            val edited = event.copy(
+                                name = editName.trim(),
+                                budget = editBudgetValue,
+                                eventType = editType,
+                                moneyDirection = editDirection.name,
+                                guestCount = editGuests.toIntOrNull()?.takeIf { it > 0 },
+                                currencyCode = editCurrency.code,
+                                startDate = editStart,
+                                endDate = editEnd
                             )
+                            // Changing the currency rewrites every figure on the budget,
+                            // which is the one thing in this app that touches what the
+                            // user recorded. It gets its own yes.
+                            if (editCurrency != money.currency) pendingCurrencyChange = edited
+                            else eventViewModel.updateEvent(edited)
                             showEditDialog = false
                         }
                     },
@@ -464,7 +615,7 @@ fun EventDetailScreen(
                             isExporting = isExporting,
                             onExport = { format ->
                                 exportViewModel.export(
-                                    ReportBuilder.forEvent(event, allExpenses, allBudgetLines, allContributions),
+                                    ReportBuilder.forEvent(event, allExpenses, allBudgetLines, allContributions, base = ActiveBase.value),
                                     format
                                 )
                             },
@@ -472,9 +623,11 @@ fun EventDetailScreen(
                         )
                         IconButton(onClick = {
                             editName = event.name
-                            editBudget = event.budget.formatAmountInput()
+                            editBudget = event.budget.formatAmountInput(money)
+                            editCurrency = money.currency
                             editGuests = event.guestCount?.toString().orEmpty()
                             editType = event.eventType
+                            editDirection = event.direction
                             editStart = event.startDate
                             editEnd = event.endDate
                             showEditDialog = true
@@ -501,13 +654,27 @@ fun EventDetailScreen(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OverviewStat(stringResource(R.string.label_total), budget.formatMoney(), Color.White, Modifier.weight(1f))
-                            OverviewStat(stringResource(R.string.label_spent), totalSpent.formatMoney(), Color(0xFFFF6B6B), Modifier.weight(1f))
                             OverviewStat(
-                                stringResource(R.string.label_remaining),
-                                remaining.formatMoney(),
-                                if (remaining >= 0) Color(0xFF6EE7B7) else Color(0xFFFF6B6B),
-                                Modifier.weight(1f)
+                                stringResource(words.total),
+                                budget.formatMoney(money),
+                                Color.White,
+                                Modifier.weight(1f),
+                                converted = budget.formatConverted(money)
+                            )
+                            // Money leaving is a warning colour; money arriving is not.
+                            OverviewStat(
+                                stringResource(words.spent),
+                                totalSpent.formatMoney(money),
+                                if (saving) Color(0xFF6EE7B7) else Color(0xFFFF6B6B),
+                                Modifier.weight(1f),
+                                converted = totalSpent.formatConverted(money)
+                            )
+                            OverviewStat(
+                                stringResource(words.remaining),
+                                remaining.coerceAtLeast(0.0).formatMoney(money),
+                                if (remaining >= 0 || saving) Color(0xFF6EE7B7) else Color(0xFFFF6B6B),
+                                Modifier.weight(1f),
+                                converted = remaining.coerceAtLeast(0.0).formatConverted(money)
                             )
                         }
                         LinearProgressIndicator(
@@ -524,7 +691,8 @@ fun EventDetailScreen(
                             trackColor = Color.White.copy(alpha = 0.2f)
                         )
                         Text(
-                            "${(progress * 100).toInt()}% used${if (overBudget) " · Over budget" else ""}",
+                            stringResource(words.progressPercent, (progress * 100).toInt()) +
+                                if (overBudget) " · ${stringResource(R.string.label_over_budget)}" else "",
                             color = if (overBudget) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.5f),
                             fontSize = 11.sp
                         )
@@ -533,21 +701,21 @@ fun EventDetailScreen(
                         // settled, because on a budget with nothing outstanding it would
                         // only ever repeat the Spent figure back at the user.
                         val payments = analytics?.payments
-                        if (payments != null && payments.outstanding > 0) {
+                        if (words.showsFundingAndPayments && payments != null && payments.outstanding > 0) {
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                OverviewStat(stringResource(R.string.label_paid), payments.paid.formatMoney(), Color.White, Modifier.weight(1f))
+                                OverviewStat(stringResource(R.string.label_paid), payments.paid.formatMoney(money), Color.White, Modifier.weight(1f))
                                 OverviewStat(
                                     stringResource(R.string.label_still_owed),
-                                    payments.outstanding.formatMoney(),
+                                    payments.outstanding.formatMoney(money),
                                     Color(0xFFFBBF24),
                                     Modifier.weight(1f)
                                 )
                                 OverviewStat(
                                     stringResource(R.string.label_overdue),
-                                    if (payments.overdueCount > 0) payments.overdueAmount.formatMoney() else "None",
+                                    if (payments.overdueCount > 0) payments.overdueAmount.formatMoney(money) else "None",
                                     if (payments.overdueCount > 0) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.6f),
                                     Modifier.weight(1f)
                                 )
@@ -567,8 +735,8 @@ fun EventDetailScreen(
 
                         analytics?.costPerGuest?.let { perGuest ->
                             Text(
-                                "${analytics.guestCount} guests · ${perGuest.formatMoney()} spent per guest" +
-                                    (analytics.budgetPerGuest?.let { " of ${it.formatMoney()} budgeted" } ?: ""),
+                                "${analytics.guestCount} guests · ${perGuest.formatMoney(money)} spent per guest" +
+                                    (analytics.budgetPerGuest?.let { " of ${it.formatMoney(money)} budgeted" } ?: ""),
                                 color = Color.White.copy(alpha = 0.5f),
                                 fontSize = 11.sp
                             )
@@ -585,8 +753,12 @@ fun EventDetailScreen(
                                     append(if (analytics.isPeriodOver) "Period closed" else "$daysLeft days left")
                                     append(" · ")
                                     append(
-                                        if (safeDaily > 0) "${safeDaily.formatMoney()} a day left to spend"
-                                        else "nothing left for the rest of the period"
+                                        when {
+                                            safeDaily <= 0 && saving -> "on target"
+                                            safeDaily <= 0 -> "nothing left for the rest of the period"
+                                            saving -> "${safeDaily.formatMoney(money)} a day to reach it"
+                                            else -> "${safeDaily.formatMoney(money)} a day left to spend"
+                                        }
                                     )
                                 },
                                 color = when {
@@ -617,15 +789,15 @@ fun EventDetailScreen(
                         ) {
                             Text(
                                 if (hasPlan) stringResource(R.string.categories_planned_vs_actual)
-                                else stringResource(R.string.categories_title),
+                                else stringResource(words.categoriesTitle),
                                 color = AppColors.Secondary,
                                 fontSize = 12.sp,
                                 letterSpacing = 0.5.sp
                             )
                             TextButton(onClick = onEditPlan, contentPadding = PaddingValues(horizontal = 8.dp)) {
                                 Text(
-                                    if (hasPlan) stringResource(R.string.categories_edit)
-                                    else stringResource(R.string.categories_set),
+                                    if (hasPlan) stringResource(words.categoriesEdit)
+                                    else stringResource(words.categoriesSet),
                                     color = AppColors.Black,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
@@ -638,18 +810,21 @@ fun EventDetailScreen(
                             // offer here is the plan, not an empty chart — a budget with
                             // no breakdown behind it can only ever report a total.
                             Text(
-                                stringResource(R.string.categories_empty_prompt),
+                                stringResource(words.categoriesEmptyPrompt),
                                 color = AppColors.Secondary,
                                 fontSize = 13.sp
                             )
                         } else {
-                            PlannedVsActualChart(categories = categories)
+                            PlannedVsActualChart(categories = categories, money = money)
                         }
                     }
                 }
             }
 
-            item {
+            // Who is paying for this is a question a savings goal has no answer to:
+            // the money arriving *is* the budget, and a second tally of it beside the
+            // first would be the same figure under two names.
+            if (words.showsFundingAndPayments) item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
                     shape = RoundedCornerShape(16.dp),
@@ -680,11 +855,11 @@ fun EventDetailScreen(
                         } else {
                             val funding = analytics?.funding
                             Row(Modifier.fillMaxWidth()) {
-                                MiniFigure(stringResource(R.string.label_received), (funding?.received ?: 0.0).formatMoney(), Modifier.weight(1f), AppColors.Success)
-                                MiniFigure(stringResource(R.string.label_pledged), (funding?.pledged ?: 0.0).formatMoney(), Modifier.weight(1f))
+                                MiniFigure(stringResource(R.string.label_received), (funding?.received ?: 0.0).formatMoney(money), Modifier.weight(1f), AppColors.Success)
+                                MiniFigure(stringResource(R.string.label_pledged), (funding?.pledged ?: 0.0).formatMoney(money), Modifier.weight(1f))
                                 MiniFigure(
                                     stringResource(R.string.label_cash_left),
-                                    (analytics?.cashPosition ?: 0.0).formatMoney(),
+                                    (analytics?.cashPosition ?: 0.0).formatMoney(money),
                                     Modifier.weight(1f),
                                     // Cash received less cash paid out. Negative means
                                     // the vendors already paid came out of somebody's own
@@ -704,13 +879,13 @@ fun EventDetailScreen(
                                         Text(
                                             if (contribution.isReceived)
                                                 "Received ${(contribution.receivedAt ?: contribution.dateCreated).formatDate()}"
-                                            else "Pledged — not yet in",
+                                            else "Promised — not yet in",
                                             color = if (contribution.isReceived) AppColors.Secondary else AppColors.Warning,
                                             fontSize = 12.sp
                                         )
                                     }
                                     Text(
-                                        contribution.amount.formatMoney(),
+                                        contribution.amount.formatMoney(money),
                                         color = AppColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 14.sp
@@ -736,7 +911,7 @@ fun EventDetailScreen(
                                 val shortfall = a.funding.shortfall(a.budget)
                                 if (shortfall > 0) {
                                     Text(
-                                        stringResource(R.string.detail_unfunded, shortfall.formatMoney()),
+                                        stringResource(R.string.detail_unfunded, shortfall.formatMoney(money)),
                                         color = AppColors.Secondary,
                                         fontSize = 11.sp
                                     )
@@ -800,7 +975,7 @@ fun EventDetailScreen(
                                             fontSize = 12.sp
                                         )
                                     }
-                                    Text(rule.amount.formatMoney(), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(rule.amount.formatMoney(money), color = AppColors.OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                     Switch(
                                         checked = rule.active,
                                         onCheckedChange = { eventViewModel.setRecurringActive(rule, it) },
@@ -843,8 +1018,8 @@ fun EventDetailScreen(
                             // While the list is narrowed the count says how much of it is
                             // hidden, so a filtered view can never be mistaken for the
                             // whole record of what was spent.
-                            if (!view.isNarrowed) "Expenses  ${expenses.size}"
-                            else "Expenses  ${visibleExpenses.size} of ${expenses.size}",
+                            if (!view.isNarrowed) stringResource(words.entriesCount, expenses.size)
+                            else stringResource(words.entriesNarrowed, visibleExpenses.size, expenses.size),
                             color = AppColors.Secondary,
                             fontSize = 12.sp,
                             letterSpacing = 0.5.sp
@@ -858,7 +1033,7 @@ fun EventDetailScreen(
                         OutlinedTextField(
                             value = view.query,
                             onValueChange = { view = view.copy(query = it) },
-                            placeholder = { Text("Search title, vendor, category or notes", fontSize = 13.sp) },
+                            placeholder = { Text(stringResource(words.searchHint), fontSize = 13.sp) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Search,
@@ -966,8 +1141,8 @@ fun EventDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.Receipt, contentDescription = null, tint = AppColors.Border, modifier = Modifier.size(36.dp))
-                            Text("No expenses yet", color = AppColors.OnSurface, fontWeight = FontWeight.Medium)
-                            Text("Tap + to record your first expense", color = AppColors.Secondary, fontSize = 13.sp)
+                            Text(stringResource(words.emptyTitle), color = AppColors.OnSurface, fontWeight = FontWeight.Medium)
+                            Text(stringResource(words.emptySubtitle), color = AppColors.Secondary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -1042,7 +1217,7 @@ fun EventDetailScreen(
                                 if (status != PaymentStatus.PAID) {
                                     Text(
                                         buildString {
-                                            append("${expense.outstanding.formatMoney()} owing")
+                                            append("${expense.outstanding.formatMoney(money)} owing")
                                             expense.dueDate?.let {
                                                 append(if (overdue) " · was due ${it.formatDate()}" else " · due ${it.formatDate()}")
                                             }
@@ -1061,7 +1236,7 @@ fun EventDetailScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    expense.amount.formatMoney(),
+                                    expense.amount.formatMoney(money),
                                     color = AppColors.OnSurface,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp
@@ -1106,7 +1281,7 @@ fun EventDetailScreen(
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add expense")
+            Icon(Icons.Default.Add, contentDescription = stringResource(words.addEntry))
         }
     }
 }
@@ -1192,13 +1367,15 @@ private fun MiniFigure(
  */
 @Composable
 private fun AddContributionDialog(
+    /** The budget's currency: a contribution to a dollar goal is typed in dollars. */
+    money: BudgetMoney,
     onDismiss: () -> Unit,
     onAdd: (source: String, amount: Double, received: Boolean) -> Unit
 ) {
     var source by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var received by remember { mutableStateOf(true) }
-    val amountValue = amount.parseAmount() ?: 0.0
+    val amountValue = amount.parseAmount(money) ?: 0.0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1233,7 +1410,7 @@ private fun AddContributionDialog(
                     Column {
                         Text("Already received", color = AppColors.OnSurface, fontSize = 14.sp)
                         Text(
-                            if (received) "Counts towards cash in hand" else "Recorded as a pledge only",
+                            if (received) "Counts towards cash in hand" else "Recorded as a promise only",
                             color = AppColors.Secondary,
                             fontSize = 12.sp
                         )
@@ -1270,6 +1447,8 @@ private fun AddContributionDialog(
  */
 @Composable
 private fun AddRecurringDialog(
+    /** The budget's currency — a rule charges in what the budget is kept in. */
+    money: BudgetMoney,
     categories: List<String>,
     eventEnd: Long?,
     onDismiss: () -> Unit,
@@ -1283,7 +1462,7 @@ private fun AddRecurringDialog(
     var showPicker by remember { mutableStateOf(false) }
     val options = remember(categories) { (categories + listOf("Others")).filter { it.isNotBlank() }.distinct() }
     var category by remember(options) { mutableStateOf(options.first()) }
-    val amountValue = amount.parseAmount() ?: 0.0
+    val amountValue = amount.parseAmount(money) ?: 0.0
 
     if (showPicker) {
         DayCalendarDialog(

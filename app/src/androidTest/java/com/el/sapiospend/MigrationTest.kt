@@ -8,10 +8,14 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.el.sapiospend.data.local.AppDatabase
+import com.el.sapiospend.domain.budget.BudgetDirection
+import com.el.sapiospend.settings.AppCurrency
 import com.el.sapiospend.data.local.LocalOwner
 import com.el.sapiospend.data.local.MIGRATION_3_4
 import com.el.sapiospend.data.local.MIGRATION_4_5
 import com.el.sapiospend.data.local.MIGRATION_5_6
+import com.el.sapiospend.data.local.MIGRATION_6_7
+import com.el.sapiospend.data.local.MIGRATION_7_8
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -87,7 +91,7 @@ class MigrationTest {
     // user on the oldest shipped version actually takes.
     private fun openMigrated(): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
             .also { migrated = it }
 
@@ -230,4 +234,34 @@ class MigrationTest {
         assertNull(db.eventDao().getAllEvents().first().single().guestCount)
     }
 
+    @Test
+    fun migrate3To7_leavesLegacyBudgetsSpendingMoneyRatherThanSaving() = runTest {
+        createVersion3Database { db ->
+            db.execSQL("INSERT INTO events (name, budget, eventType, dateCreated) VALUES ('Wedding', 1000.0, 'Wedding', 1)")
+        }
+
+        val event = openMigrated().eventDao().getAllEvents().first().single()
+
+        // Every budget that existed before direction did was money going out — it is the
+        // only kind the app could create. Coming back as a savings goal would rename its
+        // expenses to contributions and hide its payment tracking.
+        assertEquals(BudgetDirection.SPENDING, event.direction)
+        assertFalse(event.isSavingsGoal)
+    }
+
+    @Test
+    fun migrate3To8_leavesLegacyBudgetsFollowingTheAppWideCurrency() = runTest {
+        createVersion3Database { db ->
+            db.execSQL("INSERT INTO events (name, budget, eventType, dateCreated) VALUES ('Wedding', 1000.0, 'Wedding', 1)")
+        }
+
+        val event = openMigrated().eventDao().getAllEvents().first().single()
+
+        // Not backfilled with a code: a budget from before currencies were per-budget is
+        // denominated in whatever the app records in, and null is how it says so. Given
+        // a base, it resolves to that base rather than to a guess.
+        assertNull(event.currencyCode)
+        assertEquals(AppCurrency.USD, event.currency(AppCurrency.USD))
+        assertEquals(AppCurrency.NGN, event.currency(AppCurrency.NGN))
+    }
 }
